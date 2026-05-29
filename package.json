@@ -1,0 +1,53 @@
+{
+  "name": "@gg-utils/knowledge-dashboard-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Config-driven knowledge dashboard scanning and HTTP server helpers.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./port-config": {
+      "types": "./src/port-config.ts",
+      "default": "./src/port-config.ts"
+    },
+    "./scan": {
+      "types": "./src/scan.ts",
+      "default": "./src/scan.ts"
+    },
+    "./server": {
+      "types": "./src/server.ts",
+      "default": "./src/server.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "default": "./src/types.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "assets/",
+    "dist/",
+    "src/",
+    "!src/**/*.unit.test.ts",
+    "README.md",
+    "tsconfig.json",
+    "tsconfig.build.json"
+  ],
+  "engines": {
+    "node": ">=24.11.1 <25",
+    "npm": ">=9.0.0"
+  },
+  "packageManager": "npm@11.12.1",
+  "scripts": {
+    "build": "node ../../node_modules/typescript/bin/tsc -p tsconfig.build.json",
+    "type-check": "node ../../node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
+    "test": "node ../../node_modules/tsx/dist/cli.mjs --test \"src/**/*.unit.test.ts\""
+  }
+}

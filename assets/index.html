@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge Base Dashboard</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%231e293b'/%3E%3Cstop offset='100%25' stop-color='%230f172a'/%3E%3C/linearGradient%3E%3ClinearGradient id='fg' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23fbbf24'/%3E%3Cstop offset='100%25' stop-color='%23f59e0b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='6' fill='url(%23bg)' stroke='%23334155' stroke-width='1'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='central' text-anchor='middle' font-family='system-ui,sans-serif' font-weight='700' font-size='20' fill='url(%23fg)'%3ED%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets/styles/github-dark.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg-card: #1a1d27;
+    --bg-hover: #242836;
+    --bg-input: #1a1d27;
+    --bg-surface: #15171e;
+    --border: #2a2e3a;
+    --text: #e4e4e7;
+    --text-dim: #71717a;
+    --text-muted: #52525b;
+    --blue: #60a5fa;
+    --purple: #8b5cf6;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --cyan: #22d3ee;
+    --orange: #f59e0b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* -- Layout ------------------------------------------------- */
+
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+  }
+
+  .header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .header h1 { font-size: 16px; font-weight: 600; white-space: nowrap; }
+  .header h1 span { color: var(--text-dim); font-weight: 400; }
+
+  .controls { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+
+  .search-box {
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 10px; color: var(--text);
+    font-size: 12px; width: 240px; outline: none; transition: border-color 0.15s;
+  }
+  .search-box:focus { border-color: var(--blue); }
+  .search-box::placeholder { color: var(--text-muted); }
+
+  /* -- Three-column main ------------------------------------- */
+
+  .main {
+    display: grid;
+    grid-template-columns: 72px 320px 220px 1fr;
+    overflow: hidden;
+  }
+
+  /* -- Column focus indicator ---------------------------------- */
+  .col-focused { position: relative; }
+  .col-focused::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--blue);
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  /* -- Column 0: Type nav -------------------------------------- */
+
+  .col-types {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+    gap: 2px;
+    overflow-y: auto;
+    background: var(--bg-surface);
+  }
+
+  .type-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 10px 4px 8px;
+    border-radius: 8px;
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.12s;
+    user-select: none;
+  }
+  .type-item:hover { background: var(--bg-hover); }
+  .type-item.active { background: var(--bg-hover); }
+  .type-item.active[data-type="all"] { border-left-color: var(--text); color: var(--text); }
+  .type-item.active[data-type="studies"] { border-left-color: var(--blue); }
+  .type-item.active[data-type="specs"] { border-left-color: var(--purple); }
+  .type-item.active[data-type="plans"] { border-left-color: var(--green); }
+  .type-item.active[data-type="docs"] { border-left-color: var(--orange); }
+
+  .type-icon { font-size: 18px; line-height: 1; }
+  .type-label {
+    font-size: 9px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.03em; color: var(--text-dim);
+  }
+  .type-item.active .type-label { color: var(--text); }
+  .type-count {
+    font-size: 10px; font-weight: 600; color: var(--text-muted);
+  }
+  .type-item.active .type-count { color: var(--text-dim); }
+
+  /* -- Column 1: Entry list ---------------------------------- */
+
+  .col-entries {
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+  }
+
+  .sort-bar {
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 3;
+  }
+
+  .sort-select {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 11px;
+    padding: 2px 6px;
+    outline: none;
+    cursor: pointer;
+  }
+  .sort-select:hover { border-color: var(--text-dim); }
+  .sort-select:focus { border-color: var(--blue); }
+
+  .date-group { margin-bottom: 4px; }
+
+  .date-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted);
+    padding: 8px 14px 3px; position: sticky; top: 33px;
+    background: var(--bg); z-index: 1;
+  }
+
+  .entry-card {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 14px; cursor: pointer; transition: all 0.12s;
+    border-left: 3px solid transparent;
+  }
+  .entry-card:hover { background: var(--bg-hover); }
+  .entry-card.selected { background: var(--bg-hover); border-left-color: var(--blue); }
+
+  .entry-icon {
+    width: 28px; height: 28px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; flex-shrink: 0; margin-top: 1px;
+  }
+  .entry-icon.studies { background: rgba(96, 165, 250, 0.15); color: var(--blue); }
+  .entry-icon.specs { background: rgba(139, 92, 246, 0.15); color: var(--purple); }
+  .entry-icon.plans { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+  .entry-icon.docs { background: rgba(245, 158, 11, 0.15); color: var(--orange); }
+
+  .entry-body { flex: 1; min-width: 0; }
+
+  .entry-title {
+    font-size: 12px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .entry-meta {
+    font-size: 10px; color: var(--text-dim);
+    display: flex; gap: 6px; margin-top: 1px; flex-wrap: wrap;
+  }
+
+  .tag {
+    padding: 1px 5px; border-radius: 3px;
+    font-size: 9px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .tag.status-final { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+  .tag.status-draft { background: rgba(251, 191, 36, 0.15); color: var(--amber); }
+  .tag.status-active { background: rgba(96, 165, 250, 0.15); color: var(--blue); }
+  .tag.status-unknown { background: rgba(113, 113, 122, 0.15); color: var(--text-dim); }
+
+  /* -- Column 2: File panel ---------------------------------- */
+
+  .col-files {
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .col-files.empty-col {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); font-size: 12px;
+  }
+
+  .file-panel-header {
+    padding: 14px 14px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .fp-title {
+    font-size: 13px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .fp-meta {
+    font-size: 10px; color: var(--text-dim);
+    display: flex; gap: 6px; margin-top: 3px; align-items: center; flex-wrap: wrap;
+  }
+
+  .fp-actions {
+    margin-top: 8px;
+  }
+
+  .fp-actions a {
+    font-size: 11px; color: var(--text-dim); text-decoration: none;
+    padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);
+    transition: all 0.12s; display: inline-block;
+  }
+  .fp-actions a:hover { color: var(--text); border-color: var(--text-dim); }
+
+  .file-section {
+    padding: 10px 8px;
+    flex: 1; overflow-y: auto;
+  }
+
+  .file-section-label {
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-muted); padding: 0 6px 4px;
+  }
+
+  .file-item {
+    display: flex; align-items: center; gap: 7px;
+    padding: 5px 8px; border-radius: 5px;
+    cursor: pointer; font-size: 11px; transition: all 0.12s;
+    color: var(--text-dim); border: 1px solid transparent;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .file-item:hover { background: var(--bg-hover); color: var(--text); }
+  .file-item.active { background: var(--bg-hover); color: var(--blue); border-color: var(--border); }
+  .file-item .fi-icon { font-size: 11px; flex-shrink: 0; }
+  .file-item .fi-name { overflow: hidden; text-overflow: ellipsis; }
+
+  .xref-section {
+    border-top: 1px solid var(--border);
+    padding: 10px 8px;
+  }
+
+  .xref-item {
+    font-size: 10px; font-family: monospace; color: var(--cyan);
+    padding: 2px 6px; cursor: pointer; border-radius: 3px; transition: all 0.12s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .xref-item:hover { background: var(--bg-hover); text-decoration: underline; }
+
+  /* -- Column 3: Content viewer ------------------------------ */
+
+  .col-content {
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  .col-content.empty-col {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); font-size: 13px;
+  }
+
+  .content-header {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .ch-filename {
+    font-size: 14px; font-weight: 600; margin-bottom: 4px;
+  }
+
+  .ch-path-row {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  }
+
+  .ch-path {
+    font-size: 11px; font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text-dim); flex: 1; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .btn-sm {
+    font-size: 10px; color: var(--text-dim); background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 2px 7px; cursor: pointer; transition: all 0.12s;
+    white-space: nowrap; text-decoration: none; display: inline-flex;
+    align-items: center; gap: 4px;
+  }
+  .btn-sm:hover { color: var(--text); border-color: var(--text-dim); }
+  .btn-sm.copied { color: var(--green); border-color: var(--green); }
+
+  .ch-toolbar {
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .tab-bar {
+    display: flex; gap: 0; border: 1px solid var(--border); border-radius: 5px; overflow: hidden;
+  }
+
+  .tab-btn {
+    font-size: 11px; padding: 3px 12px; background: var(--bg-card);
+    border: none; color: var(--text-dim); cursor: pointer; transition: all 0.12s;
+  }
+  .tab-btn:not(:last-child) { border-right: 1px solid var(--border); }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { background: var(--bg-hover); color: var(--text); }
+
+  .toolbar-spacer { flex: 1; }
+
+  /* -- Content area ------------------------------------------ */
+
+  .content-area {
+    flex: 1; overflow-y: auto; padding: 18px;
+  }
+
+  .content-source {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px; line-height: 1.6;
+    white-space: pre-wrap; word-wrap: break-word;
+    color: var(--text-dim);
+  }
+
+  /* -- Rendered markdown styles ------------------------------ */
+
+  .md-rendered {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+
+  .md-rendered h1 {
+    font-size: 1.6em; font-weight: 700; margin: 1.2em 0 0.5em;
+    padding-bottom: 0.3em; border-bottom: 1px solid var(--border);
+  }
+  .md-rendered h2 {
+    font-size: 1.3em; font-weight: 600; margin: 1.1em 0 0.4em;
+    padding-bottom: 0.25em; border-bottom: 1px solid var(--border);
+  }
+  .md-rendered h3 { font-size: 1.15em; font-weight: 600; margin: 0.9em 0 0.4em; }
+  .md-rendered h4, .md-rendered h5, .md-rendered h6 {
+    font-size: 1em; font-weight: 600; margin: 0.7em 0 0.3em;
+  }
+  .md-rendered p { margin: 0.6em 0; }
+  .md-rendered a { color: var(--blue); text-decoration: none; }
+  .md-rendered a:hover { text-decoration: underline; }
+  .md-rendered strong { font-weight: 600; color: var(--text); }
+  .md-rendered em { font-style: italic; }
+  .md-rendered code {
+    background: rgba(255,255,255,0.06); padding: 2px 5px;
+    border-radius: 3px; font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85em; color: var(--amber);
+  }
+  .md-rendered pre {
+    background: rgba(0,0,0,0.35); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px; overflow-x: auto;
+    margin: 0.7em 0;
+  }
+  .md-rendered pre code {
+    background: none; padding: 0; font-size: 12px;
+    color: var(--text-dim); line-height: 1.6;
+  }
+  .md-rendered table {
+    border-collapse: collapse; width: 100%; margin: 0.7em 0;
+    font-size: 13px;
+  }
+  .md-rendered th, .md-rendered td {
+    border: 1px solid var(--border); padding: 6px 10px; text-align: left;
+  }
+  .md-rendered th {
+    background: rgba(255,255,255,0.03); font-weight: 600;
+  }
+  .md-rendered tr:hover td { background: rgba(255,255,255,0.015); }
+  .md-rendered blockquote {
+    border-left: 3px solid var(--blue); padding: 4px 14px;
+    color: var(--text-dim); margin: 0.6em 0;
+    background: rgba(96, 165, 250, 0.04); border-radius: 0 4px 4px 0;
+  }
+  .md-rendered ul, .md-rendered ol { padding-left: 1.6em; margin: 0.5em 0; }
+  .md-rendered li { margin: 0.2em 0; }
+  .md-rendered li > ul, .md-rendered li > ol { margin: 0.1em 0; }
+  .md-rendered hr {
+    border: none; border-top: 1px solid var(--border); margin: 1.2em 0;
+  }
+  .md-rendered img { max-width: 100%; border-radius: 6px; margin: 0.5em 0; }
+  .md-rendered .mermaid {
+    background: rgba(0,0,0,0.2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 16px; margin: 0.7em 0;
+    text-align: center; overflow-x: auto;
+  }
+  .md-rendered input[type="checkbox"] { margin-right: 6px; }
+
+  /* -- Toast ------------------------------------------------- */
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--bg-card); border: 1px solid var(--green);
+    color: var(--green); padding: 6px 16px; border-radius: 8px;
+    font-size: 12px; opacity: 0; transition: opacity 0.2s;
+    pointer-events: none; z-index: 200;
+  }
+  .toast.show { opacity: 1; }
+
+  /* -- Scrollbar ---------------------------------------------- */
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  /* -- Empty / loading --------------------------------------- */
+
+  .empty-msg {
+    text-align: center; padding: 60px 20px; color: var(--text-muted);
+  }
+  .empty-msg h2 { font-size: 14px; margin-bottom: 4px; color: var(--text-dim); }
+  .empty-msg p { font-size: 12px; }
+
+  .loading {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; color: var(--text-dim); font-size: 13px;
+  }
+
+  /* Surface Switcher */
+  .surface-switcher { position: relative; }
+  .surface-switcher-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    font-family: inherit;
+    color: inherit;
+  }
+  .surface-switcher-trigger:hover {
+    border-color: var(--border);
+    background: var(--bg-hover);
+  }
+  .surface-switcher-title {
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--blue);
+  }
+  .surface-switcher-suffix {
+    font-weight: 400;
+    font-size: 16px;
+    color: var(--text-dim);
+  }
+  .surface-switcher-chevron {
+    color: var(--text-dim);
+    transition: transform 0.15s;
+  }
+  .surface-switcher.open .surface-switcher-chevron { transform: rotate(180deg); }
+  .surface-switcher-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 260px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 100;
+    padding: 4px;
+    animation: switcherFadeIn 0.12s ease-out;
+  }
+  .surface-switcher.open .surface-switcher-dropdown { display: block; }
+  @keyframes switcherFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .surface-switcher-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--text);
+    transition: background 0.1s;
+  }
+  .surface-switcher-item:hover { background: var(--bg-hover); }
+  .surface-switcher-item.active { background: #252d42; pointer-events: none; }
+  .surface-switcher-item-name { font-size: 13px; font-weight: 600; }
+  .surface-switcher-item.active .surface-switcher-item-name::after {
+    content: " (current)";
+    font-weight: 400;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+  .surface-switcher-item-desc { font-size: 11px; color: var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="header">
+    <div class="surface-switcher" id="surfaceSwitcher">
+      <button class="surface-switcher-trigger">
+        <span class="surface-switcher-title">Knowledge Base</span>
+        <span class="surface-switcher-suffix">Dashboard</span>
+        <svg class="surface-switcher-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <div class="surface-switcher-dropdown" id="surfaceSwitcherDropdown"></div>
+    </div>
+    <div class="controls">
+      <input type="text" class="search-box" id="search"
+             placeholder="Search... (press /)" autocomplete="off">
+    </div>
+  </div>
+  <div class="main" id="main">
+    <div class="col-types" id="colTypes"></div>
+    <div class="col-entries" id="colEntries">
+      <div class="loading">Loading knowledge base...</div>
+    </div>
+    <div class="col-files empty-col" id="colFiles">
+      Select an entry
+    </div>
+    <div class="col-content empty-col" id="colContent">
+      Select a file to view
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// == State ====================================================
+let allEntries = [];
+let filteredEntries = [];
+let activeFilter = "all"; // "all" | "studies" | "specs" | "plans" | "docs"
+let sortBy = "date"; // "date" | "name" | "path" | "files"
+let selectedEntry = null;
+let selectedFile = null;
+let rawContent = "";        // raw markdown of current file
+let activeTab = "rendered"; // "rendered" | "source"
+let searchQuery = "";
+let focusedCol = 1; // 0=types, 1=entries, 2=files, 3=content
+
+const COL_IDS = ["colTypes", "colEntries", "colFiles", "colContent"];
+function setFocusedCol(col) {
+  focusedCol = Math.max(0, Math.min(3, col));
+  COL_IDS.forEach(id => document.getElementById(id)?.classList.remove("col-focused"));
+  document.getElementById(COL_IDS[focusedCol])?.classList.add("col-focused");
+}
+
+// == Constants ================================================
+const ICONS = { studies: "\ud83d\udd2c", specs: "\ud83d\udccb", plans: "\ud83d\uddfa\ufe0f", docs: "\ud83d\udcd6" };
+
+function statusClass(s) {
+  if (!s) return "status-unknown";
+  const sl = s.toLowerCase();
+  if (sl === "final" || sl === "completed" || sl === "done") return "status-final";
+  if (sl === "draft" || sl === "wip") return "status-draft";
+  if (sl === "active" || sl === "in-progress") return "status-active";
+  return "status-unknown";
+}
+
+// == Data fetching ============================================
+async function fetchEntries() {
+  const res = await fetch("/api/entries");
+  const data = await res.json();
+  allEntries = data.entries;
+  renderTypeNav(data.counts);
+  applyFilters();
+  applyHash();
+  setFocusedCol(focusedCol);
+}
+
+async function fetchContent(entryPath, file) {
+  const res = await fetch(`/api/entry-content?path=${encodeURIComponent(entryPath)}&file=${encodeURIComponent(file)}`);
+  if (!res.ok) return "Failed to load file.";
+  return await res.text();
+}
+
+// == Render: Type nav ==========================================
+function renderTypeNav(counts) {
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const types = [
+    { key: "all", icon: "✦", label: "All", count: total },
+    { key: "studies", icon: ICONS.studies, label: "Studies", count: counts.studies },
+    { key: "specs", icon: ICONS.specs, label: "Specs", count: counts.specs },
+    { key: "plans", icon: ICONS.plans, label: "Plans", count: counts.plans },
+    { key: "docs", icon: ICONS.docs, label: "Docs", count: counts.docs },
+  ];
+  document.getElementById("colTypes").innerHTML = types.map(t => `
+    <div class="type-item ${activeFilter === t.key ? "active" : ""}"
+         data-type="${t.key}" onclick="selectType('${t.key}')">
+      <span class="type-icon">${t.icon}</span>
+      <span class="type-label">${t.label}</span>
+      <span class="type-count">${t.count}</span>
+    </div>
+  `).join("");
+}
+
+// == Render: Column 1 — Entry list ============================
+function sortBarHTML() {
+  const options = [
+    { value: "date", label: "Date" },
+    { value: "name", label: "Name" },
+    { value: "path", label: "Path" },
+    { value: "files", label: "Files" },
+  ];
+  return `<div class="sort-bar">
+    <span>Sort by</span>
+    <select class="sort-select" onchange="changeSort(this.value)">
+      ${options.map(o => `<option value="${o.value}" ${sortBy === o.value ? "selected" : ""}>${o.label}</option>`).join("")}
+    </select>
+    <span style="margin-left:auto">${filteredEntries.length} entries</span>
+  </div>`;
+}
+
+function groupEntries(entries) {
+  switch (sortBy) {
+    case "name": {
+      const sorted = [...entries].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
+      const groups = {};
+      for (const e of sorted) {
+        const letter = (e.title[0] || "?").toUpperCase();
+        if (!groups[letter]) groups[letter] = [];
+        groups[letter].push(e);
+      }
+      return Object.keys(groups).sort().map(k => ({ label: k, entries: groups[k] }));
+    }
+    case "path": {
+      const sorted = [...entries].sort((a, b) => a.dirPath.localeCompare(b.dirPath));
+      const groups = {};
+      for (const e of sorted) {
+        const key = e.repo ? `${e.repo}/docs` : e.dirPath.split("/")[0];
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(e);
+      }
+      return Object.keys(groups).sort().map(k => ({ label: k, entries: groups[k] }));
+    }
+    case "files": {
+      const sorted = [...entries].sort((a, b) => b.fileCount - a.fileCount);
+      return [{ label: "By file count", entries: sorted }];
+    }
+    default: { // "date"
+      const sorted = [...entries].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+      const groups = {};
+      for (const e of sorted) {
+        const d = e.date || "unknown";
+        if (!groups[d]) groups[d] = [];
+        groups[d].push(e);
+      }
+      return Object.keys(groups).sort((a, b) => {
+        if (a === "unknown") return 1;
+        if (b === "unknown") return -1;
+        return b.localeCompare(a);
+      }).map(k => ({ label: formatDate(k), entries: groups[k] }));
+    }
+  }
+}
+
+function changeSort(value) {
+  sortBy = value;
+  renderEntries();
+  updateHash();
+}
+
+function renderEntryCard(e) {
+  const sel = selectedEntry && selectedEntry.slug === e.slug && selectedEntry.type === e.type;
+  return `
+    <div class="entry-card ${sel ? "selected" : ""}"
+         onclick="selectEntry('${e.type}','${escA(e.slug)}')">
+      <div class="entry-icon ${e.type}">${ICONS[e.type]}</div>
+      <div class="entry-body">
+        <div class="entry-title">${esc(e.title)}</div>
+        <div class="entry-meta">
+          ${e.repo ? `<span class="tag" style="background:rgba(245,158,11,0.15);color:var(--orange)">${e.repo}</span>` : `<span class="tag ${statusClass(e.status)}">${e.status}</span>`}
+          <span>${e.fileCount} file${e.fileCount !== 1 ? "s" : ""}</span>
+          ${e.crossRefs.length ? `<span style="color:var(--cyan)">${e.crossRefs.length} refs</span>` : ""}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderEntries() {
+  const el = document.getElementById("colEntries");
+  if (filteredEntries.length === 0) {
+    el.innerHTML = sortBarHTML() + `<div class="empty-msg"><h2>No entries found</h2><p>Try adjusting filters or search.</p></div>`;
+    return;
+  }
+
+  const grouped = groupEntries(filteredEntries);
+  el.innerHTML = sortBarHTML() + grouped.map(g => `
+    <div class="date-group">
+      <div class="date-label">${esc(g.label)}</div>
+      ${g.entries.map(renderEntryCard).join("")}
+    </div>
+  `).join("");
+}
+
+// == Render: Column 2 — File panel ============================
+function renderFiles(entry) {
+  const el = document.getElementById("colFiles");
+  if (!entry) {
+    el.className = "col-files empty-col";
+    el.innerHTML = "Select an entry";
+    return;
+  }
+
+  el.className = "col-files";
+  const fileGHBase = entry.githubUrl.replace("/tree/", "/blob/");
+
+  el.innerHTML = `
+    <div class="file-panel-header">
+      <div class="fp-title">${esc(entry.title)}</div>
+      <div class="fp-meta">
+        <span class="tag ${statusClass(entry.status)}">${entry.status}</span>
+        <span>${entry.date}</span>
+        <span>${entry.fileCount} files</span>
+      </div>
+      <div class="fp-actions">
+        <a href="${entry.githubUrl}" target="_blank">Open on GitHub</a>
+      </div>
+    </div>
+    <div class="file-section">
+      <div class="file-section-label">Files</div>
+      ${entry.files.map(f => {
+        const active = selectedFile === f;
+        const icon = f.endsWith(".md") ? "\ud83d\udcc4" : f.endsWith(".html") ? "\ud83c\udf10" : "\ud83d\udcc1";
+        return `
+        <div class="file-item ${active ? "active" : ""}"
+             onclick="selectFile('${escA(f)}')" title="${esc(f)}">
+          <span class="fi-icon">${icon}</span>
+          <span class="fi-name">${esc(f)}</span>
+        </div>`;
+      }).join("")}
+    </div>
+    ${entry.crossRefs.length ? `
+    <div class="xref-section">
+      <div class="file-section-label">Cross-References</div>
+      ${entry.crossRefs.map(ref => `
+        <div class="xref-item" onclick="navigateToRef('${escA(ref)}')" title="${esc(ref)}">${esc(ref)}</div>
+      `).join("")}
+    </div>` : ""}
+  `;
+}
+
+// == Render: Column 3 — Content viewer ========================
+function renderContent() {
+  const el = document.getElementById("colContent");
+  if (!selectedEntry || !selectedFile) {
+    el.className = "col-content empty-col";
+    el.innerHTML = selectedEntry ? "Select a file to view" : "Select an entry";
+    return;
+  }
+
+  el.className = "col-content";
+
+  const filePath = `${selectedEntry.dirPath}/${selectedFile}`;
+  const fileGHUrl = selectedEntry.githubUrl.replace("/tree/", "/blob/") + "/" + selectedFile;
+
+  el.innerHTML = `
+    <div class="content-header">
+      <div class="ch-filename">${esc(selectedFile)}</div>
+      <div class="ch-path-row">
+        <span class="ch-path" title="${esc(filePath)}">${esc(filePath)}</span>
+        <button class="btn-sm" onclick="copyText('${escA(filePath)}', this)" title="Copy path">
+          Copy Path
+        </button>
+        <a class="btn-sm" href="${fileGHUrl}" target="_blank" title="Open file on GitHub">
+          GitHub
+        </a>
+      </div>
+      <div class="ch-toolbar">
+        <div class="tab-bar">
+          <button class="tab-btn ${activeTab === "rendered" ? "active" : ""}"
+                  onclick="switchTab('rendered')">Rendered</button>
+          <button class="tab-btn ${activeTab === "source" ? "active" : ""}"
+                  onclick="switchTab('source')">Source</button>
+        </div>
+        <div class="toolbar-spacer"></div>
+        <button class="btn-sm" onclick="copyMarkdown(this)" title="Copy raw markdown">
+          Copy Markdown
+        </button>
+      </div>
+    </div>
+    <div class="content-area" id="contentArea">
+      <div style="color:var(--text-muted); font-size:13px;">Loading...</div>
+    </div>
+  `;
+}
+
+function renderContentBody() {
+  const area = document.getElementById("contentArea");
+  if (!area || !rawContent) return;
+
+  if (activeTab === "source") {
+    area.innerHTML = `<div class="content-source">${esc(rawContent)}</div>`;
+  } else {
+    const html = renderMarkdown(rawContent);
+    area.innerHTML = `<div class="md-rendered">${html}</div>`;
+    renderMermaidBlocks();   // swap mermaid code blocks to divs + render (async)
+    highlightCodeBlocks();   // highlight remaining code blocks
+  }
+}
+
+function highlightCodeBlocks() {
+  const area = document.getElementById("contentArea");
+  if (!area || typeof hljs === "undefined") return;
+  area.querySelectorAll("pre code").forEach(block => {
+    hljs.highlightElement(block);
+  });
+}
+
+// == Interactions =============================================
+function selectType(type) {
+  activeFilter = type;
+  renderTypeNav(getCounts());
+  applyFilters();
+  updateHash();
+}
+
+function selectEntry(type, slug) {
+  selectedEntry = allEntries.find(e => e.type === type && e.slug === slug);
+  selectedFile = null;
+  rawContent = "";
+  activeTab = "rendered";
+
+  renderEntries();
+  renderFiles(selectedEntry);
+
+  if (selectedEntry) {
+    const autoFile = selectedEntry.mainFile || selectedEntry.files[0] || null;
+    if (autoFile) {
+      selectFile(autoFile);
+    } else {
+      renderContent();
+    }
+  } else {
+    renderContent();
+  }
+  updateHash();
+}
+
+async function selectFile(fileName) {
+  selectedFile = fileName;
+  rawContent = "";
+
+  // Update file list highlighting
+  document.querySelectorAll(".file-item").forEach(el => {
+    const name = el.querySelector(".fi-name")?.textContent;
+    el.classList.toggle("active", name === fileName);
+  });
+
+  renderContent();
+
+  if (selectedEntry) {
+    rawContent = await fetchContent(selectedEntry.dirPath, fileName);
+    renderContentBody();
+  }
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  // Update tab button states
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.textContent.toLowerCase() === tab);
+  });
+  renderContentBody();
+}
+
+function navigateToRef(ref) {
+  const match = ref.match(/\.(studies|specs|plans|docs)\/([^/]+)/);
+  if (match) {
+    const [, refType, refSlug] = match;
+    const entry = allEntries.find(e => e.type === refType && e.slug === refSlug);
+    if (entry) {
+      activeFilter = "all";
+      renderTypeNav(getCounts());
+      applyFilters();
+      selectEntry(entry.type, entry.slug);
+      setTimeout(() => {
+        const card = document.querySelector(".entry-card.selected");
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 50);
+    }
+  }
+}
+
+function applyFilters() {
+  const q = searchQuery.toLowerCase();
+  filteredEntries = allEntries.filter(e => {
+    if (activeFilter !== "all" && e.type !== activeFilter) return false;
+    if (q && !e.title.toLowerCase().includes(q) && !e.slug.toLowerCase().includes(q) && !(e.searchText || "").toLowerCase().includes(q)) return false;
+    return true;
+  });
+  renderEntries();
+}
+
+function getCounts() {
+  const c = { studies: 0, specs: 0, plans: 0, docs: 0 };
+  for (const e of allEntries) c[e.type]++;
+  return c;
+}
+
+// == Clipboard ================================================
+async function copyText(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+    if (btn) {
+      btn.classList.add("copied");
+      const orig = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.classList.remove("copied"); btn.textContent = orig; }, 1500);
+    }
+    showToast("Copied to clipboard");
+  } catch {
+    showToast("Copy failed");
+  }
+}
+
+async function copyMarkdown(btn) {
+  if (!rawContent) return;
+  await copyText(rawContent, btn);
+}
+
+function showToast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 1500);
+}
+
+// == Markdown rendering =======================================
+function stripFrontmatter(src) {
+  return src.replace(/^---\n[\s\S]*?\n---\n?/, "");
+}
+
+function renderMarkdown(src) {
+  const stripped = stripFrontmatter(src);
+  // Try marked.js first (loaded from CDN)
+  if (typeof marked !== "undefined") {
+    try {
+      if (typeof marked.parse === "function") {
+        marked.setOptions({ breaks: true, gfm: true });
+        return marked.parse(stripped);
+      }
+      return marked(stripped);
+    } catch (e) {
+      console.warn("marked.js error, using fallback:", e);
+    }
+  }
+  return renderMarkdownFallback(stripped);
+}
+
+function renderMarkdownFallback(src) {
+  // Strip frontmatter
+  src = src.replace(/^---\n[\s\S]*?\n---\n?/, "");
+
+  // Protect fenced code blocks
+  const codeBlocks = [];
+  src = src.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    codeBlocks.push({ lang, code: code.trimEnd() });
+    return `\x00CB${codeBlocks.length - 1}\x00`;
+  });
+
+  // Protect inline code
+  const inlineCodes = [];
+  src = src.replace(/`([^`]+)`/g, (_, code) => {
+    inlineCodes.push(code);
+    return `\x00IC${inlineCodes.length - 1}\x00`;
+  });
+
+  // Protect tables
+  const tables = [];
+  src = src.replace(/^(\|.+\|)\n(\|[-| :]+\|)\n((?:\|.+\|\n?)*)/gm, (match) => {
+    tables.push(match.trimEnd());
+    return `\x00TBL${tables.length - 1}\x00`;
+  });
+
+  // Escape HTML
+  src = esc(src);
+
+  // Headings
+  src = src.replace(/^(#{1,6})\s+(.+)$/gm, (_, h, t) => `<h${h.length}>${t}</h${h.length}>`);
+
+  // Bold + italic
+  src = src.replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>");
+  src = src.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  src = src.replace(/\*(.+?)\*/g, "<em>$1</em>");
+
+  // Links
+  src = src.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+  // Blockquotes
+  src = src.replace(/^&gt;\s?(.*)$/gm, "<blockquote>$1</blockquote>");
+  src = src.replace(/<\/blockquote>\n<blockquote>/g, "<br>");
+
+  // List items
+  src = src.replace(/^[-*]\s+(.+)$/gm, "<li>$1</li>");
+  src = src.replace(/^\d+\.\s+(.+)$/gm, "<li>$1</li>");
+  src = src.replace(/((?:<li>.*<\/li>\n?)+)/g, "<ul>$1</ul>");
+
+  // HR
+  src = src.replace(/^-{3,}$/gm, "<hr>");
+  src = src.replace(/^\*{3,}$/gm, "<hr>");
+
+  // Paragraphs (double newline separation)
+  src = src.split("\n\n").map(block => {
+    block = block.trim();
+    if (!block || block.startsWith("<") || block.startsWith("\x00")) return block;
+    return `<p>${block.replace(/\n/g, "<br>")}</p>`;
+  }).join("\n");
+
+  // Restore tables
+  tables.forEach((tbl, i) => {
+    const rows = tbl.split("\n");
+    const headers = rows[0].split("|").slice(1, -1);
+    const body = rows.slice(2);
+    let html = "<table><thead><tr>";
+    headers.forEach(h => html += `<th>${esc(h.trim())}</th>`);
+    html += "</tr></thead><tbody>";
+    body.forEach(row => {
+      const cells = row.split("|").slice(1, -1);
+      html += "<tr>";
+      cells.forEach(c => html += `<td>${esc(c.trim())}</td>`);
+      html += "</tr>";
+    });
+    html += "</tbody></table>";
+    src = src.replace(`\x00TBL${i}\x00`, html);
+  });
+
+  // Restore code blocks
+  codeBlocks.forEach((b, i) => {
+    src = src.replace(`\x00CB${i}\x00`, `<pre><code>${esc(b.code)}</code></pre>`);
+  });
+
+  // Restore inline codes
+  inlineCodes.forEach((c, i) => {
+    src = src.replace(`\x00IC${i}\x00`, `<code>${esc(c)}</code>`);
+  });
+
+  return src;
+}
+
+// == Helpers ==================================================
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function escA(s) {
+  return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+}
+function formatDate(d) {
+  if (d === "unknown") return "Unknown Date";
+  try {
+    const p = d.split("-");
+    const m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${m[parseInt(p[1]) - 1]} ${parseInt(p[2])}, ${p[0]}`;
+  } catch { return d; }
+}
+
+// == Search with debounce =====================================
+let searchTimer;
+document.getElementById("search").addEventListener("input", (e) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    searchQuery = e.target.value;
+    applyFilters();
+  }, 150);
+});
+
+// == URL hash state ============================================
+function updateHash() {
+  const parts = [];
+  if (activeFilter !== "all") parts.push(`type=${activeFilter}`);
+  if (sortBy !== "date") parts.push(`sort=${sortBy}`);
+  if (selectedEntry) parts.push(`entry=${selectedEntry.type}:${encodeURIComponent(selectedEntry.slug)}`);
+  const hash = parts.length ? "#" + parts.join("&") : "";
+  if (window.location.hash !== hash) {
+    history.replaceState(null, "", hash || window.location.pathname);
+  }
+}
+
+function parseHash() {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return null;
+  const params = {};
+  for (const part of hash.split("&")) {
+    const eq = part.indexOf("=");
+    if (eq > 0) params[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
+  }
+  return params;
+}
+
+function applyHash() {
+  const params = parseHash();
+  if (!params) return;
+  if (params.type) activeFilter = params.type;
+  if (params.sort) sortBy = params.sort;
+  renderTypeNav(getCounts());
+  applyFilters();
+  if (params.entry) {
+    const colonIdx = params.entry.indexOf(":");
+    if (colonIdx > 0) {
+      const type = params.entry.slice(0, colonIdx);
+      const slug = params.entry.slice(colonIdx + 1);
+      selectEntry(type, slug);
+    }
+  }
+}
+
+// == Keyboard shortcuts =======================================
+// Click on a column → set focus
+COL_IDS.forEach((id, i) => {
+  document.getElementById(id)?.addEventListener("click", () => setFocusedCol(i));
+});
+
+document.addEventListener("keydown", (e) => {
+  const searchEl = document.getElementById("search");
+  if (e.key === "/" && document.activeElement !== searchEl) {
+    e.preventDefault();
+    searchEl.focus();
+    return;
+  }
+  if (e.key === "Escape") {
+    searchEl.blur();
+    if (searchQuery) {
+      searchQuery = "";
+      searchEl.value = "";
+      applyFilters();
+    }
+    return;
+  }
+  if (document.activeElement === searchEl) return;
+
+  // -- Left / Right: switch column focus -----------------------
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    e.preventDefault();
+    const dir = e.key === "ArrowRight" ? 1 : -1;
+    let next = focusedCol + dir;
+    // Skip files column if no entry selected
+    if (next === 2 && !selectedEntry) next += dir;
+    // Skip content column if no file selected
+    if (next === 3 && !selectedFile) next += dir;
+    setFocusedCol(next);
+    return;
+  }
+
+  // -- Enter: drill into next column ---------------------------
+  if (e.key === "Enter") {
+    e.preventDefault();
+    let next = focusedCol + 1;
+    if (next === 2 && !selectedEntry) return;
+    if (next === 3 && !selectedFile) return;
+    if (next <= 3) setFocusedCol(next);
+    return;
+  }
+
+  // -- Up / Down: navigate within focused column ---------------
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const down = e.key === "ArrowDown";
+
+    switch (focusedCol) {
+      case 0: { // types
+        const types = ["all", "studies", "specs", "plans", "docs"];
+        const idx = types.indexOf(activeFilter);
+        const next = down ? Math.min(idx + 1, types.length - 1) : Math.max(idx - 1, 0);
+        selectType(types[next]);
+        const item = document.querySelector(`.type-item[data-type="${types[next]}"]`);
+        if (item) item.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        break;
+      }
+      case 1: { // entries
+        const curIdx = selectedEntry
+          ? filteredEntries.findIndex(x => x.type === selectedEntry.type && x.slug === selectedEntry.slug)
+          : -1;
+        const next = down
+          ? Math.min(curIdx + 1, filteredEntries.length - 1)
+          : Math.max(curIdx - 1, 0);
+        if (next >= 0 && next < filteredEntries.length) {
+          const e = filteredEntries[next];
+          selectEntry(e.type, e.slug);
+          setTimeout(() => {
+            const card = document.querySelector(".entry-card.selected");
+            if (card) card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }, 50);
+        }
+        break;
+      }
+      case 2: { // files
+        if (!selectedEntry) break;
+        const files = selectedEntry.files;
+        const idx = selectedFile ? files.indexOf(selectedFile) : -1;
+        const next = down ? Math.min(idx + 1, files.length - 1) : Math.max(idx - 1, 0);
+        if (next >= 0 && next < files.length) {
+          selectFile(files[next]);
+          setTimeout(() => {
+            const item = document.querySelector(".file-item.active");
+            if (item) item.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }, 50);
+        }
+        break;
+      }
+      case 3: { // content — scroll
+        const area = document.getElementById("contentArea");
+        if (area) area.scrollBy({ top: down ? 120 : -120, behavior: "smooth" });
+        break;
+      }
+    }
+  }
+});
+
+// == Mermaid ===================================================
+mermaid.initialize({
+  startOnLoad: false,
+  theme: "dark",
+  themeVariables: {
+    darkMode: true,
+    background: "#1a1d27",
+    primaryColor: "#60a5fa",
+    primaryTextColor: "#e4e4e7",
+    primaryBorderColor: "#2a2e3a",
+    lineColor: "#71717a",
+    secondaryColor: "#8b5cf6",
+    tertiaryColor: "#34d399",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  },
+});
+
+async function renderMermaidBlocks() {
+  const area = document.getElementById("contentArea");
+  if (!area) return;
+  const codeBlocks = area.querySelectorAll('pre > code.language-mermaid, pre > code[class="language-mermaid"]');
+  if (codeBlocks.length === 0) return;
+
+  for (const code of codeBlocks) {
+    const pre = code.parentElement;
+    const container = document.createElement("div");
+    container.className = "mermaid";
+    container.textContent = code.textContent;
+    pre.replaceWith(container);
+  }
+
+  try {
+    await mermaid.run({ nodes: area.querySelectorAll(".mermaid") });
+  } catch (e) {
+    console.warn("Mermaid render error:", e);
+  }
+}
+
+// == Surface Switcher ==========================================
+(function initSurfaceSwitcher() {
+  var CURRENT_SURFACE = "knowledge-base";
+  var SURFACE_LIST = [
+    { id: "platform-status", name: "Platform Status", desc: "Service health and uptime", port: 9013 },
+    { id: "logs-web", name: "Logs Viewer", desc: "Real-time log streaming", port: 9011 },
+    { id: "knowledge-base", name: "Knowledge Base", desc: "Documentation and entries", port: 9012 },
+    { id: "sample-profiles", name: "Sample Profiles", desc: "Corpus and authoring browser", port: 9014 },
+    { id: "keystone-admin", name: "Keystone Admin", desc: "Database model admin", port: 8011, path: "/keystone/" },
+  ];
+
+  var switcher = document.getElementById("surfaceSwitcher");
+  var trigger = switcher.querySelector(".surface-switcher-trigger");
+  var dropdown = document.getElementById("surfaceSwitcherDropdown");
+
+  SURFACE_LIST.forEach(function(s) {
+    var a = document.createElement("a");
+    a.className = "surface-switcher-item" + (s.id === CURRENT_SURFACE ? " active" : "");
+    var url = "http://localhost:" + s.port + (s.path || "/");
+    a.href = s.id === CURRENT_SURFACE ? "#" : url;
+    if (s.id !== CURRENT_SURFACE) a.target = "_blank";
+    a.innerHTML =
+      '<span class="surface-switcher-item-name">' + s.name + "</span>" +
+      '<span class="surface-switcher-item-desc">' + s.desc + "</span>";
+    dropdown.appendChild(a);
+  });
+
+  trigger.addEventListener("click", function() {
+    switcher.classList.toggle("open");
+  });
+
+  document.addEventListener("click", function(e) {
+    if (!switcher.contains(e.target)) switcher.classList.remove("open");
+  });
+
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape") switcher.classList.remove("open");
+  });
+})();
+
+// == Init =====================================================
+fetchEntries();
+</script>
+</body>
+</html>
