@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Config-driven knowledge dashboard scanning and HTTP server helpers.",
-  "license": "0BSD",
+  "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "main": "./src/index.ts",
