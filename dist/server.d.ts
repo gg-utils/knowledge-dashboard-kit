@@ -28,7 +28,7 @@ export declare function knowledgeDashboardKitBuildSubdomainUrl(options: {
  *
  * @param options - Trusted configuration, filesystem root, bind settings, and hooks.
  * @returns The HTTP server; callers own shutdown and server error handling.
- * @throws If an explicitly allowed Host authority is invalid.
+ * @throws If an allowed Host, hidden collection name, or scan budget is invalid.
  */
 export declare function knowledgeDashboardKitStartServer(options: KnowledgeDashboardKit_StartServerOptions): Server;
 //# sourceMappingURL=server.d.ts.map

@@ -33,10 +33,10 @@ export declare function knowledgeDashboardKitExtractSearchText(options: {
     readonly maxLength?: number;
 }): string;
 /**
- * Walks one dated-folder collection under the project root.
- *
- * @param options - Trusted collection configuration, root, and optional logging hook.
- * @returns Entries containing only readable documents allowed by the mandatory policy.
+ * Walks a single dated collection with its own bounded scan.
+ * @param options - Collection, trusted configuration, root, and optional logger.
+ * @returns Safe nonempty entries, or an empty list if the scan budget is exceeded.
+ * @throws If hidden-root or budget configuration is invalid.
  */
 export declare function knowledgeDashboardKitScanCollection(options: {
     readonly collection: KnowledgeDashboardKit_CollectionConfig;
@@ -45,10 +45,10 @@ export declare function knowledgeDashboardKitScanCollection(options: {
     readonly projectRoot: string;
 }): KnowledgeDashboardKit_Entry[];
 /**
- * Indexes markdown under a single docs source.
- *
- * @param options - Trusted source configuration, root, and optional logging hook.
- * @returns Flat document entries and immediate subfolder bundles allowed by the policy.
+ * Walks a single docs source with its own bounded scan.
+ * @param options - Source, trusted configuration, root, and optional logger.
+ * @returns Safe nonempty entries, or an empty list if the scan budget is exceeded.
+ * @throws If hidden-root or budget configuration is invalid.
  */
 export declare function knowledgeDashboardKitScanDocsSource(options: {
     readonly config: KnowledgeDashboardKit_Config;
@@ -57,10 +57,10 @@ export declare function knowledgeDashboardKitScanDocsSource(options: {
     readonly source: KnowledgeDashboardKit_DocsSourceConfig;
 }): KnowledgeDashboardKit_Entry[];
 /**
- * Refreshes the full in-memory index for all configured collections and docs sources.
- *
- * @param options - Trusted dashboard configuration, root, and optional logging hook.
- * @returns The current safe document index, timestamp, and counts by entry type.
+ * Refreshes the full bounded index and private scan-time filesystem identities.
+ * @param options - Trusted configuration, root, and optional logger.
+ * @returns Safe entries and counts, or an empty index with a path-free budget error.
+ * @throws If hidden-root or budget configuration is invalid, before scanning begins.
  */
 export declare function knowledgeDashboardKitScanAll(options: {
     readonly config: KnowledgeDashboardKit_Config;

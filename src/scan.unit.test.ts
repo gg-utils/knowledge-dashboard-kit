@@ -74,6 +74,6 @@ test("knowledgeDashboardKitScanAll indexes collections and docs sources", () => 
   assert.equal(study?.title, "Runtime Study");
   assert.deepEqual(study?.crossRefs, [".plans/2026-05-20-runtime-plan/plan.md"]);
   const docs = result.entries.find((entry) => entry.type === "docs");
-  assert.equal(docs?.slug, "runtime/operators");
+  assert.equal(docs?.slug, "runtime/docs/operators/");
   assert.equal(docs?.title, "Operator Guide");
 });

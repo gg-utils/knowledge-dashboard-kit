@@ -20,13 +20,14 @@ import {
   knowledgeDashboardKitIsDocumentPath,
   knowledgeDashboardKitIsSafeRelativePath,
   knowledgeDashboardKitReadDocument,
+  knowledgeDashboardKitHiddenRoots,
+  knowledgeDashboardKitScanIdentities,
 } from "./content-policy.js";
 import type { ServerResponse } from "node:http";
 import { knowledgeDashboardKitScanAll } from "./scan.js";
 import type {
   KnowledgeDashboardKit_Config,
   KnowledgeDashboardKit_RequestLogRecord,
-  KnowledgeDashboardKit_ScanResult,
   KnowledgeDashboardKit_ServerHooks,
   KnowledgeDashboardKit_StartServerOptions,
 } from "./types.js";
@@ -135,17 +136,6 @@ function knowledgeDashboardKitWriteJson(options: {
 }
 
 /**
- * Builds exact directory/file keys from the latest scan without path normalization.
- *
- * @param data - Current scanner result.
- * @returns Exact JSON-encoded directory/filename pairs eligible for content requests.
- */
-function knowledgeDashboardKitContentAllowList(data: KnowledgeDashboardKit_ScanResult): Set<string> {
-  return new Set(data.entries.flatMap((entry) => entry.files.map((file) =>
-    JSON.stringify([entry.dirPath, file]))));
-}
-
-/**
  * Validates an explicitly trusted Host authority without accepting URL syntax or wildcards.
  *
  * @param host - Explicitly configured Host authority.
@@ -192,6 +182,26 @@ function knowledgeDashboardKitIsTrustedRequest(
 }
 
 /**
+ * Requires viewer intent on APIs and top-level navigation metadata on the shell.
+ * @param req - Request whose fetch metadata is checked without trusting a missing Origin.
+ * @param isApi - Whether the route belongs to the protected API namespace.
+ * @returns Whether the request is eligible after Host and Origin validation.
+ */
+function knowledgeDashboardKitAllowsFetch(req: IncomingMessage, isApi: boolean): boolean {
+  const site = req.headers["sec-fetch-site"];
+  const mode = req.headers["sec-fetch-mode"];
+  const dest = req.headers["sec-fetch-dest"];
+  if (isApi) {
+    return req.headers["x-knowledge-dashboard"] === "1" &&
+      (site === undefined || site === "same-origin" || site === "none");
+  }
+  if (mode !== undefined && mode !== "navigate") return false;
+  if (dest !== undefined && dest !== "document") return false;
+  return site === undefined || site === "same-origin" || site === "none" ||
+    ((site === "cross-site" || site === "same-site") && mode === "navigate" && dest === "document");
+}
+
+/**
  * Restricts every response, with no executable content or ambient cross-origin access.
  *
  * @param res - Response receiving the restrictive default security and privacy headers.
@@ -222,7 +232,7 @@ function knowledgeDashboardKitShellCsp(html: string): string {
  *
  * @param options - Trusted configuration, filesystem root, bind settings, and hooks.
  * @returns The HTTP server; callers own shutdown and server error handling.
- * @throws If an explicitly allowed Host authority is invalid.
+ * @throws If an allowed Host, hidden collection name, or scan budget is invalid.
  */
 export function knowledgeDashboardKitStartServer(
   options: KnowledgeDashboardKit_StartServerOptions,
@@ -240,7 +250,8 @@ export function knowledgeDashboardKitStartServer(
     projectRoot,
   });
 
-  let allowedContent = knowledgeDashboardKitContentAllowList(cachedData);
+  const hiddenRoots = knowledgeDashboardKitHiddenRoots(options.config);
+  let allowedContent = knowledgeDashboardKitScanIdentities.get(cachedData);
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     knowledgeDashboardKitSetResponseHeaders(res);
@@ -276,6 +287,16 @@ export function knowledgeDashboardKitStartServer(
       return;
     }
 
+    const isApi = url.pathname.startsWith("/api/");
+    if (!knowledgeDashboardKitAllowsFetch(req, isApi)) {
+      knowledgeDashboardKitWriteJson({ body: { error: "Forbidden" }, res, statusCode: 403 });
+      return;
+    }
+    if (isApi && !["/api/status", "/api/entries", "/api/entry-content"].includes(url.pathname)) {
+      knowledgeDashboardKitWriteJson({ body: { error: "Not found" }, res, statusCode: 404 });
+      return;
+    }
+
     if (url.pathname === "/api/status") {
       knowledgeDashboardKitWriteJson({
         body: { status: "ok", entries: cachedData.entries.length },
@@ -291,7 +312,7 @@ export function knowledgeDashboardKitStartServer(
         logger: hooks,
         projectRoot,
       });
-      allowedContent = knowledgeDashboardKitContentAllowList(cachedData);
+      allowedContent = knowledgeDashboardKitScanIdentities.get(cachedData);
       knowledgeDashboardKitWriteJson({ body: cachedData, res, statusCode: 200 });
       return;
     }
@@ -302,13 +323,20 @@ export function knowledgeDashboardKitStartServer(
       const relative = entryPath === "" ? file : `${entryPath}/${file}`;
       if (entryPath === null || file === null || relative === null ||
           url.searchParams.getAll("path").length !== 1 || url.searchParams.getAll("file").length !== 1 ||
-          !knowledgeDashboardKitIsSafeRelativePath(entryPath) ||
-          !knowledgeDashboardKitIsDocumentPath(relative) ||
-          !allowedContent.has(JSON.stringify([entryPath, file]))) {
+          !knowledgeDashboardKitIsSafeRelativePath(entryPath, hiddenRoots) ||
+          !knowledgeDashboardKitIsDocumentPath(relative, hiddenRoots) ||
+          !allowedContent?.has(JSON.stringify([entryPath, file]))) {
         knowledgeDashboardKitWriteJson({ body: { error: "Not found" }, res, statusCode: 404 });
         return;
       }
-      const document = knowledgeDashboardKitReadDocument(projectRoot, relative);
+      const rawPath = req.url?.split("?")[1]?.split("&").find((pair) => pair.startsWith("path="))?.slice(5) ?? "";
+      const rawFile = req.url?.split("?")[1]?.split("&").find((pair) => pair.startsWith("file="))?.slice(5) ?? "";
+      if (entryPath.startsWith(".") && (rawPath !== encodeURIComponent(entryPath) || rawFile !== encodeURIComponent(file))) {
+        knowledgeDashboardKitWriteJson({ body: { error: "Not found" }, res, statusCode: 404 });
+        return;
+      }
+      const expectedIdentity = allowedContent?.get(JSON.stringify([entryPath, file]));
+      const document = knowledgeDashboardKitReadDocument(projectRoot, relative, { hiddenRoots, expectedIdentity });
       if (document === null) {
         knowledgeDashboardKitWriteJson({ body: { error: "Not found" }, res, statusCode: 404 });
         return;
@@ -329,6 +357,11 @@ export function knowledgeDashboardKitStartServer(
       res.end("Failed to load dashboard HTML");
     }
   });
+
+  server.headersTimeout = 10_000;
+  server.requestTimeout = 15_000;
+  server.keepAliveTimeout = 5_000;
+  server.setTimeout(15_000, (socket) => socket.destroy());
 
   server.listen(options.port, bindHost, () => {
     const subdomainUrl = knowledgeDashboardKitBuildSubdomainUrl({
