@@ -112,7 +112,7 @@ function knowledgeDashboardKitActiveEnvFilePath(
 function knowledgeDashboardKitActivePortEnvValue(options: {
   readonly envFilePath: string | null;
   readonly canonicalPortEnvName: string;
-  readonly legacyPortEnvName?: string;
+  readonly legacyPortEnvName?: string | undefined;
 }): string | null {
   const canonicalValue = knowledgeDashboardKitReadEnvFileValue({
     envFilePath: options.envFilePath,

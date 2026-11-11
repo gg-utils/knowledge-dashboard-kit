@@ -55,6 +55,8 @@ async function makeFixture(t: TestContext, overrides: Partial<KnowledgeDashboard
   const config: KnowledgeDashboardKit_Config = { ...knowledgeDashboardKitTestConfig, collections: [],
     docsSources: [{ repoLabel: "test", dir: "." }, { repoLabel: "docs", dir: "docs" }] };
   const server = knowledgeDashboardKitStartServer({ config, env: {}, port: 0, projectRoot: root,
+    // Preserve full hook values so path-disclosure assertions also cover unexpected errors.
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string
     hooks: { log: () => {}, error: (line, error) => logs.push(`${line} ${String(error ?? "")}`) }, ...overrides });
   t.after(async () => {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -84,7 +86,7 @@ async function makeFixture(t: TestContext, overrides: Partial<KnowledgeDashboard
             assert.ok(!body.includes(FAKE_SECRET), "a synthetic secret must never appear in a response");
             assert.ok(!body.includes(root), "responses must not disclose absolute paths");
             resolve({ status: res.statusCode ?? 0, body, headers: res.headers });
-          } catch (error: unknown) { reject(error); }
+          } catch (error: unknown) { reject(error instanceof Error ? error : new Error("Unexpected non-Error assertion failure")); }
         });
         res.on("error", reject);
       });
@@ -118,13 +120,13 @@ function assertSafeHeaders(headers: IncomingHttpHeaders): void {
   assert.match(String(headers["content-type"]), /charset=utf-8/u);
 }
 
-test("serves scanned documents as inert text with security headers and loopback binding", async (t) => {
+void test("serves scanned documents as inert text with security headers and loopback binding", async (t) => {
   const fixture = await makeFixture(t);
   const address = fixture.server.address();
   assert.ok(address !== null && typeof address !== "string");
   assert.equal(address.address, "127.0.0.1");
   for (const [directory, file] of [["", "README.md"], ["", "guide.mdx"], ["", "notes.txt"],
-    ["", "page.html"], ["docs/bundle", "guide.md"]]) {
+    ["", "page.html"], ["docs/bundle", "guide.md"]] as const) {
     const response = await fixture.get(contentTarget(directory, file));
     assert.equal(response.status, 200);
     assert.equal(response.headers["content-type"], "text/plain; charset=utf-8");
@@ -144,7 +146,7 @@ test("serves scanned documents as inert text with security headers and loopback 
   assert.match(String(shell.headers["content-security-policy"]), /script-src-attr 'none'/u);
 });
 
-test("denies secrets, unindexed files, directories, symlinks, and path parser bypasses uniformly", async (t) => {
+void test("denies secrets, unindexed files, directories, symlinks, and path parser bypasses uniformly", async (t) => {
   const fixture = await makeFixture(t);
   const denied = [...fixture.denied, "escape.md", "alias.md", "safe-alias.md", "linked-directory/outside.md",
     "script.js", "image.svg", "large.md", "directory.md", "unindexed/deep/hidden.md"];
@@ -182,7 +184,7 @@ test("denies secrets, unindexed files, directories, symlinks, and path parser by
   }
 });
 
-test("scanner shares hard denies even for explicitly configured hidden or outside roots", async (t) => {
+void test("scanner shares hard denies even for explicitly configured hidden or outside roots", async (t) => {
   const fixture = await makeFixture(t);
   const scan = knowledgeDashboardKitScanAll({ config: fixture.config, projectRoot: fixture.root });
   const listed = scan.entries.flatMap((entry) => entry.files.map((file) => [entry.dirPath, file].filter(Boolean).join("/")));
@@ -194,14 +196,14 @@ test("scanner shares hard denies even for explicitly configured hidden or outsid
   }
   for (const dir of [".git", ".studies", "../", fixture.temporary, "node_modules", "linked-directory"]) {
     const config = { ...fixture.config, docsSources: [{ repoLabel: "denied", dir }],
-      collections: [{ ...knowledgeDashboardKitTestConfig.collections[0], dir }] };
+      collections: [{ ...firstCollection(), dir }] };
     const result = knowledgeDashboardKitScanAll({ config, projectRoot: fixture.root });
     assert.equal(result.entries.length, 0, dir);
     assert.ok(!JSON.stringify(result).includes(FAKE_SECRET));
   }
 });
 
-test("refreshes the exact allow-list and refuses files replaced after scanning", async (t) => {
+void test("refreshes the exact allow-list and refuses files replaced after scanning", async (t) => {
   const fixture = await makeFixture(t);
   fs.writeFileSync(path.join(fixture.root, "new.md"), "New documentation");
   assert.equal((await fixture.get(contentTarget("", "new.md"))).status, 404);
@@ -224,7 +226,7 @@ test("refreshes the exact allow-list and refuses files replaced after scanning",
   await fixture.get("/api/entries");
 });
 
-test("rejects untrusted Host and Origin headers on every route without permissive CORS", async (t) => {
+void test("rejects untrusted Host and Origin headers on every route without permissive CORS", async (t) => {
   const fixture = await makeFixture(t);
   for (const target of ["/", "/api/status", "/api/entries", contentTarget("", "README.md")]) {
     for (const headers of [{ Host: "attacker.invalid" }, { Host: `localhost:${fixture.port}` },
@@ -243,7 +245,7 @@ test("rejects untrusted Host and Origin headers on every route without permissiv
   assert.equal((await fixture.get("/api/status", { Origin: "https://attacker.invalid" }, "OPTIONS")).status, 403);
 });
 
-test("non-loopback binding and additional Host authorities require explicit options", async (t) => {
+void test("non-loopback binding and additional Host authorities require explicit options", async (t) => {
   const fixture = await makeFixture(t, { host: "0.0.0.0", allowedHosts: ["docs.example.test:4317"] });
   assert.equal((await fixture.get("/api/status")).status, 403);
   assert.equal((await fixture.get("/api/status", { Host: "docs.example.test:4317", Origin: "http://docs.example.test:4317" })).status, 200);
@@ -254,7 +256,7 @@ test("non-loopback binding and additional Host authorities require explicit opti
   }
 });
 
-test("shell read failures keep response and hook errors free of absolute paths", async (t) => {
+void test("shell read failures keep response and hook errors free of absolute paths", async (t) => {
   const fixture = await makeFixture(t, { config: { ...knowledgeDashboardKitTestConfig, collections: [], docsSources: [],
     htmlFilePath: path.join(os.tmpdir(), "dashboard-missing-file", "index.html") } });
   const response = await fixture.get("/");
@@ -264,7 +266,7 @@ test("shell read failures keep response and hook errors free of absolute paths",
 });
 
 
-test("API requests require viewer intent and reject foreign fetch metadata without Origin", async (t) => {
+void test("API requests require viewer intent and reject foreign fetch metadata without Origin", async (t) => {
   const fixture = await makeFixture(t);
   for (const target of ["/api/status", "/api/entries", contentTarget("", "README.md"), "/api/unknown"]) {
     assert.equal((await fixture.get(target, { "X-Knowledge-Dashboard": undefined })).status, 403);
@@ -298,7 +300,7 @@ test("API requests require viewer intent and reject foreign fetch metadata witho
   assert.equal(fixture.server.timeout, 15_000);
 });
 
-test("hard links and changed file or parent identities stay unavailable until refresh", async (t) => {
+void test("hard links and changed file or parent identities stay unavailable until refresh", async (t) => {
   const fixture = await makeFixture(t);
   fs.linkSync(path.join(fixture.root, ".env"), path.join(fixture.root, "hard.md"));
   const scan = await fixture.get("/api/entries");
@@ -326,15 +328,22 @@ test("hard links and changed file or parent identities stay unavailable until re
   assert.equal((await fixture.get(contentTarget("", "README.md"))).status, 404);
 });
 
+/** Requires the collection fixture before spreading it into test configurations. */
+function firstCollection() {
+  const collection = knowledgeDashboardKitTestConfig.collections[0];
+  assert.ok(collection);
+  return collection;
+}
+
 /** Creates an explicit hidden collection configuration for the synthetic server fixtures. */
 function hiddenConfig(names: readonly string[]): KnowledgeDashboardKit_Config {
   return { ...knowledgeDashboardKitTestConfig, docsSources: [], allowedHiddenCollectionRoots: names,
-    collections: [".studies", ".plans", ".specs"].map((dir, index) => ({
-      dir, type: (["studies", "plans", "specs"] as const)[index], color: "blue", icon: "document",
+    collections: (["studies", "plans", "specs"] as const).map((type) => ({
+      dir: `.${type}`, type, color: "blue", icon: "document",
     })) };
 }
 
-test("hidden-root permission does not reach a nested collection while exact and visible collections still serve", async (t) => {
+void test("hidden-root permission does not reach a nested collection while exact and visible collections still serve", async (t) => {
   const fixture = await makeFixture(t, { config: {
     ...knowledgeDashboardKitTestConfig, docsSources: [], allowedHiddenCollectionRoots: [".studies"],
     collections: [
@@ -344,7 +353,7 @@ test("hidden-root permission does not reach a nested collection while exact and 
     ],
   } });
   for (const [directory, content] of [[".studies/public-entry", "Exact hidden collection"],
-    [".studies/nested/private-entry", FAKE_SECRET], ["studies/visible-entry", "Visible collection"]]) {
+    [".studies/nested/private-entry", FAKE_SECRET], ["studies/visible-entry", "Visible collection"]] as const) {
     fs.mkdirSync(path.join(fixture.root, directory), { recursive: true });
     fs.writeFileSync(path.join(fixture.root, directory, "guide.md"), content);
   }
@@ -360,7 +369,7 @@ test("hidden-root permission does not reach a nested collection while exact and 
     assert.equal(denied.status, 404);
     assert.deepEqual(JSON.parse(denied.body), { error: "Not found" });
     for (const [directory, content] of [[".studies/public-entry", "Exact hidden collection"],
-      ["studies/visible-entry", "Visible collection"]]) {
+      ["studies/visible-entry", "Visible collection"]] as const) {
       const document = await fixture.get(contentTarget(directory, "guide.md"));
       assert.equal(document.status, 200);
       assert.equal(document.body, content);
@@ -368,7 +377,7 @@ test("hidden-root permission does not reach a nested collection while exact and 
   }
 });
 
-test("explicit hidden collection roots publish exact non-empty entries and retain all denies", async (t) => {
+void test("explicit hidden collection roots publish exact non-empty entries and retain all denies", async (t) => {
   const names = [".studies", ".plans", ".specs"];
   const fixture = await makeFixture(t, { config: hiddenConfig(names) });
   for (const name of names) {
@@ -433,7 +442,7 @@ test("explicit hidden collection roots publish exact non-empty entries and retai
   assert.equal((await fixture.get(contentTarget(".plans/public-entry", "new.md"))).body, "Fresh public document");
 });
 
-test("hidden root validation rejects every reserved family and noncanonical name at startup", async (t) => {
+void test("hidden root validation rejects every reserved family and noncanonical name at startup", async (t) => {
   const fixture = await makeFixture(t);
   const denied = [".env", ".env.local", ".environment", ".git", ".gitignore", ".github", ".ssh", ".aws", ".gnupg", ".npmrc", ".npm", ".docker", ".kube", ".config", ".netrc", ".pypirc", ".azure", ".gcloud", ".cache", ".local", ".vscode", ".idea",
     "", ".", "..", "studies", ".Studies", ".STUDIES", ".studiés", ".studies/child", "a/.studies", ".studies\\child", ".%73tudies", ".studies:stream", ".studies\0", ".studies\n", ".studies\u007f", ".studies.", ".studies "];
@@ -448,7 +457,7 @@ test("hidden root validation rejects every reserved family and noncanonical name
   }
 });
 
-test("scan budgets fail closed with a path-free error and recover on a later scan", async (t) => {
+void test("scan budgets fail closed with a path-free error and recover on a later scan", async (t) => {
   for (const scanLimits of [{ maxEntries: 1, maxTotalBytes: 100_000 }, { maxEntries: 100, maxTotalBytes: 25 }]) {
     const fixture = await makeFixture(t, { config: { ...knowledgeDashboardKitTestConfig, collections: [],
       docsSources: [{ repoLabel: "public", dir: "." }], scanLimits } });
@@ -468,12 +477,12 @@ test("scan budgets fail closed with a path-free error and recover on a later sca
   }
 });
 
-test("four documents with equal basenames have distinct selectable identities", async (t) => {
+void test("four documents with equal basenames have distinct selectable identities", async (t) => {
   const fixture = await makeFixture(t);
   const files = ["hostile.md", "hostile.mdx", "hostile.html", "hostile.txt"];
   for (const file of files) fs.writeFileSync(path.join(fixture.root, file), `Public ${file}`);
   const scan = JSON.parse((await fixture.get("/api/entries")).body) as { entries: { slug: string; files: string[] }[] };
-  const entries = scan.entries.filter((entry) => files.includes(entry.files[0]));
+  const entries = scan.entries.filter((entry) => entry.files[0] !== undefined && files.includes(entry.files[0]));
   assert.equal(entries.length, 4);
   assert.equal(new Set(entries.map((entry) => entry.slug)).size, 4);
   const html = fs.readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
@@ -496,9 +505,9 @@ test("four documents with equal basenames have distinct selectable identities", 
 });
 
 
-test("a root collection has an exact non-empty positive control beside denied files", async (t) => {
+void test("a root collection has an exact non-empty positive control beside denied files", async (t) => {
   const config = { ...knowledgeDashboardKitTestConfig, docsSources: [],
-    collections: [{ ...knowledgeDashboardKitTestConfig.collections[0], dir: "." }] };
+    collections: [{ ...firstCollection(), dir: "." }] };
   const fixture = await makeFixture(t, { config });
   fs.mkdirSync(path.join(fixture.root, "publishable"));
   fs.writeFileSync(path.join(fixture.root, "publishable/guide.md"), "Root collection positive control");
@@ -519,7 +528,7 @@ test("a root collection has an exact non-empty positive control beside denied fi
 });
 
 
-test("omitting the hidden-root list denies otherwise publishable hidden documents over HTTP", async (t) => {
+void test("omitting the hidden-root list denies otherwise publishable hidden documents over HTTP", async (t) => {
   const config = { ...hiddenConfig([]), allowedHiddenCollectionRoots: undefined };
   const fixture = await makeFixture(t, { config });
   const names = [".studies", ".plans", ".specs"];
@@ -533,7 +542,7 @@ test("omitting the hidden-root list denies otherwise publishable hidden document
   for (const name of names) assert.equal((await fixture.get(contentTarget(`${name}/public-entry`, "guide.md"))).status, 404);
 });
 
-test("scan limits accept exact boundaries, count secondary files, and reject invalid budgets", async (t) => {
+void test("scan limits accept exact boundaries, count secondary files, and reject invalid budgets", async (t) => {
   const body = "# Public documentation";
   const config = { ...knowledgeDashboardKitTestConfig, collections: [], docsSources: [{ repoLabel: "public", dir: "limited" }],
     scanLimits: { maxEntries: 1, maxTotalBytes: Buffer.byteLength(body) } };
@@ -559,7 +568,7 @@ test("scan limits accept exact boundaries, count secondary files, and reject inv
 });
 
 
-test("symlinks at hidden root, entry, and document depths never enter scan or content payloads", async (t) => {
+void test("symlinks at hidden root, entry, and document depths never enter scan or content payloads", async (t) => {
   const fixture = await makeFixture(t, { config: hiddenConfig([".studies", ".plans", ".specs"]) });
   const outside = path.join(fixture.temporary, "link-target");
   fs.mkdirSync(path.join(outside, "entry"), { recursive: true });
@@ -579,7 +588,7 @@ test("symlinks at hidden root, entry, and document depths never enter scan or co
     [".plans/control", ["guide.md"]], [".specs/control", ["guide.md"]],
   ]);
   for (const name of [".plans", ".specs"]) assert.equal((await fixture.get(contentTarget(`${name}/control`, "guide.md"))).body, `Public ${name}`);
-  for (const [dir, file] of [[".studies/entry", "guide.md"], [".plans/entry", "guide.md"], [".specs/control", "alias.md"]]) {
+  for (const [dir, file] of [[".studies/entry", "guide.md"], [".plans/entry", "guide.md"], [".specs/control", "alias.md"]] as const) {
     assert.equal((await fixture.get(contentTarget(dir, file))).status, 404);
   }
 });

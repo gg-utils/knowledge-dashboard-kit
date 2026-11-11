@@ -1,3 +1,4 @@
+/* eslint @typescript-eslint/require-await: "off" -- Async DOM mocks intentionally return immediate browser-style promises. */
 /** Exercises the actual inline viewer code without a browser or remote dependencies. */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -35,7 +36,7 @@ function renderPreview(file: string, tab: string, content: string) {
   };
 }
 
-test("Markdown previews escape document HTML and live in an opaque script-disabled sandbox", () => {
+void test("Markdown previews escape document HTML and live in an opaque script-disabled sandbox", () => {
   const node = renderPreview("guide.md", "rendered", '<script>alert(1)</script>\n\n<img src=x onerror=alert(1)>\n\n# Guide\n\n[link](javascript:alert(1))');
   assert.equal(node.tag, "iframe");
   assert.equal(node.attributes.sandbox, "");
@@ -46,9 +47,9 @@ test("Markdown previews escape document HTML and live in an opaque script-disabl
   assert.doesNotMatch(node.srcdoc ?? "", /<script|<img/iu);
 });
 
-test("HTML, plain text, and the source tab are assigned only through textContent", () => {
+void test("HTML, plain text, and the source tab are assigned only through textContent", () => {
   const content = '<script>alert(1)</script><img src=x onerror=alert(1)>';
-  for (const [file, tab] of [["page.html", "rendered"], ["notes.txt", "rendered"], ["guide.md", "source"]]) {
+  for (const [file, tab] of [["page.html", "rendered"], ["notes.txt", "rendered"], ["guide.md", "source"]] as const) {
     const node = renderPreview(file, tab, content);
     assert.equal(node.tag, "div");
     assert.equal(node.textContent, content);
@@ -56,14 +57,14 @@ test("HTML, plain text, and the source tab are assigned only through textContent
   }
 });
 
-test("the shell needs no remote scripts or inline event handlers", () => {
+void test("the shell needs no remote scripts or inline event handlers", () => {
   const html = fs.readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
   assert.doesNotMatch(html, /<script\b[^>]*\bsrc\s*=/iu);
   assert.doesNotMatch(html, /\bon(?:click|change|error|load)\s*=/iu);
 });
 
 
-test("every bundled API call sends the dashboard header and scan errors appear in the viewer", async () => {
+void test("every bundled API call sends the dashboard header and scan errors appear in the viewer", async () => {
   const html = fs.readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
   const script = html.match(/<script>([\s\S]*?)<\/script>/u)?.[1];
   assert.ok(script);
@@ -88,7 +89,7 @@ test("every bundled API call sends the dashboard header and scan errors appear i
   assert.equal([...script.matchAll(/\bfetch\(/gu)].length, requests.length);
 });
 
-test("a changed document shows an unavailable state whose Refresh action rescans and reloads", async () => {
+void test("a changed document shows an unavailable state whose Refresh action rescans and reloads", async () => {
   const html = fs.readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
   const script = html.match(/<script>([\s\S]*?)<\/script>/u)?.[1];
   assert.ok(script);
@@ -121,12 +122,15 @@ test("a changed document shows an unavailable state whose Refresh action rescans
     context.tab = tab;
     await vm.runInContext('fetchContent("docs", "guide.md").then(content => { rawContent = content; activeTab = tab; renderContentBody(); })', context);
     assert.equal(nodes.length, 2);
+    assert.ok(nodes[0]);
+    assert.ok(nodes[1]);
     assert.match(nodes[0].textContent ?? "", /unavailable.*changed since the last scan.*Refresh to rescan and reload/u);
     assert.equal(nodes[1].textContent, "Refresh");
     assert.equal(nodes[1].attributes["data-action"], "refresh");
   }
   assert.ok(click);
-  click({ target: { closest: () => ({ dataset: { action: nodes[1].attributes["data-action"] } }) } });
+  assert.ok(nodes[1]);
+  click({ target: { closest: () => ({ dataset: { action: nodes[1]?.attributes["data-action"] } }) } });
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(requests.at(-1), "/api/entries");
   assert.equal(vm.runInContext("reloaded", context), 1);

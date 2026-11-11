@@ -269,6 +269,7 @@ function scanCollection(context: ScanContext, collection: KnowledgeDashboardKit_
     const files = [...documents.keys()];
     if (files.length === 0) continue;
     const mainFile = knowledgeDashboardKitFindCollectionMainFile(files) ?? files[0];
+    if (mainFile === undefined) continue;
     const content = documents.get(mainFile)?.content ?? "";
     const frontmatter = knowledgeDashboardKitParseFrontmatter(content);
     const title = frontmatter.title ?? slug.replace(/^\d{4}-\d{2}-\d{2}(-\d{6})?-/, "").replace(/-/g, " ");
@@ -319,6 +320,7 @@ function scanDocsSource(context: ScanContext, source: KnowledgeDashboardKit_Docs
     const files = [...documents.keys()];
     if (files.length === 0) continue;
     const mainFile = files.find((file) => file === "README.md") ?? files.find((file) => file.endsWith(".md")) ?? files[0];
+    if (mainFile === undefined) continue;
     const content = documents.get(mainFile)?.content ?? "";
     const frontmatter = knowledgeDashboardKitParseFrontmatter(content);
     const latestMtime = [...documents.values()].reduce((latest, document) => Math.max(latest, document.stat.mtimeMs), 0);

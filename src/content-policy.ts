@@ -47,6 +47,8 @@ export function knowledgeDashboardKitHiddenRoots(config: KnowledgeDashboardKit_C
  * @returns Whether all segments satisfy the deny policy before extension filtering.
  */
 export function knowledgeDashboardKitIsSafeRelativePath(relative: string, hiddenRoots: ReadonlySet<string> = new Set()): boolean {
+  // Control characters are deliberately denied in document paths.
+  // eslint-disable-next-line no-control-regex
   if (/[\\%:\u0000-\u001f\u007f]/u.test(relative) || path.isAbsolute(relative)) return false;
   return relative === "" || relative.split("/").every((segment, index) =>
     segment.length > 0 && (!segment.startsWith(".") || (index === 0 && hiddenRoots.has(segment))) &&
@@ -73,7 +75,7 @@ export function knowledgeDashboardKitIsDocumentPath(relative: string, hiddenRoot
  */
 function sameIdentity(actual: KnowledgeDashboardKit_DocumentIdentity, expected: KnowledgeDashboardKit_DocumentIdentity): boolean {
   return actual.length > 0 && actual.length === expected.length && actual.every((item, index) =>
-    item.dev === expected[index].dev && item.ino === expected[index].ino);
+    item.dev === expected[index]?.dev && item.ino === expected[index]?.ino);
 }
 
 /**

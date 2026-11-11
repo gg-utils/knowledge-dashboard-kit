@@ -84,7 +84,7 @@ export type KnowledgeDashboardKit_RealmUrlConfig = {
 /** Project-owned config consumed by reusable scanning and server helpers. */
 export type KnowledgeDashboardKit_Config = {
   /** Exact lowercase hidden direct-child collection names; reserved names can never be enabled. */
-  readonly allowedHiddenCollectionRoots?: readonly string[];
+  readonly allowedHiddenCollectionRoots?: readonly string[] | undefined;
   /** Optional positive integer scan budgets; defaults are 10,000 entries and 64 MiB read. */
   readonly scanLimits?: { readonly maxEntries?: number; readonly maxTotalBytes?: number };
   readonly title: string;
