@@ -55,7 +55,7 @@ afterEach(() => {
   }
 });
 
-test("knowledgeDashboardKitResolvePort uses CLI port before env files", () => {
+void test("knowledgeDashboardKitResolvePort uses CLI port before env files", () => {
   const envFilePath = writeTempEnvFile(
     "RUNTIME_REALM_SLUG=branch-02\nRUNTIME_KNOWLEDGE_PORT=19012\n",
   );
@@ -71,7 +71,7 @@ test("knowledgeDashboardKitResolvePort uses CLI port before env files", () => {
   );
 });
 
-test("knowledgeDashboardKitResolvePort rejects non-canonical default inheritance", () => {
+void test("knowledgeDashboardKitResolvePort rejects non-canonical default inheritance", () => {
   const envFilePath = writeTempEnvFile(
     "RUNTIME_REALM_SLUG=branch-02\nRUNTIME_KNOWLEDGE_PORT=9012\n",
   );
@@ -88,7 +88,7 @@ test("knowledgeDashboardKitResolvePort rejects non-canonical default inheritance
   );
 });
 
-test("knowledgeDashboardKitResolvePort accepts explicit non-root process env port", () => {
+void test("knowledgeDashboardKitResolvePort accepts explicit non-root process env port", () => {
   const envFilePath = writeTempEnvFile("RUNTIME_REALM_SLUG=branch-02\n");
 
   assert.deepEqual(
@@ -105,7 +105,7 @@ test("knowledgeDashboardKitResolvePort accepts explicit non-root process env por
   );
 });
 
-test("knowledgeDashboardKitResolvePort keeps canonical default stable", () => {
+void test("knowledgeDashboardKitResolvePort keeps canonical default stable", () => {
   assert.deepEqual(
     knowledgeDashboardKitResolvePort({
       activeEnvFilePaths: [],

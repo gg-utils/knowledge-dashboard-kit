@@ -49,7 +49,7 @@ function knowledgeDashboardKitResolveServerHooks(
   return {
     log: hooks?.log ?? DEFAULT_SERVER_HOOKS.log,
     error: hooks?.error ?? DEFAULT_SERVER_HOOKS.error,
-    requestLog: hooks?.requestLog,
+    ...(hooks?.requestLog === undefined ? {} : { requestLog: hooks.requestLog }),
   };
 }
 

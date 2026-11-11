@@ -4,7 +4,7 @@ import test from "node:test";
 import { knowledgeDashboardKitHiddenRoots, knowledgeDashboardKitIsDocumentPath } from "./content-policy.js";
 import { knowledgeDashboardKitTestConfig } from "./test-config.unit.js";
 
-test("hidden-root exceptions apply only to the exact configured collection segment", () => {
+void test("hidden-root exceptions apply only to the exact configured collection segment", () => {
   const names = [".studies", ".plans", ".specs"];
   const config = { ...knowledgeDashboardKitTestConfig, allowedHiddenCollectionRoots: names,
     collections: knowledgeDashboardKitTestConfig.collections.map((collection) => ({ ...collection, dir: `.${collection.dir}` })) };

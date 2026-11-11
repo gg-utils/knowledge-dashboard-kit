@@ -5,21 +5,41 @@ Config-driven scanning and HTTP server helpers for local knowledge dashboards.
 Use this package when a repository has markdown studies, plans, specs, docs, or generated artifacts
 that need to be indexed and served through a lightweight local dashboard.
 
-## Install
+## Use from another repository
 
-```bash
-npm install @gg-utils/knowledge-dashboard-kit@git+https://github.com/gg-utils/knowledge-dashboard-kit.git#main
-```
-
-Pin a commit for production:
+Requires Node `>=22.0.0 <27` (Node 22, 24 and 26 are validated). Add this exact dependency:
 
 ```json
 {
   "dependencies": {
-    "@gg-utils/knowledge-dashboard-kit": "git+https://github.com/gg-utils/knowledge-dashboard-kit.git#c7f63ba"
+    "@gg-utils/knowledge-dashboard-kit": "git+https://github.com/gg-utils/knowledge-dashboard-kit.git#v0.2.0"
   }
 }
 ```
+
+From the consuming repository root, install and copy the runnable configuration and adapter:
+
+```bash
+npm install --ignore-scripts
+cp node_modules/@gg-utils/knowledge-dashboard-kit/examples/knowledge-dashboard.config.mjs ./knowledge-dashboard.config.mjs
+cp node_modules/@gg-utils/knowledge-dashboard-kit/examples/knowledge-dashboard.mjs ./knowledge-dashboard.mjs
+node knowledge-dashboard.mjs
+```
+
+Edit `knowledge-dashboard.config.mjs` to set `githubRepo` to your `owner/repository` and the title
+and branch as needed. The supplied config explicitly enables `.studies`, `.plans`, and `.specs`
+collections and scans `docs` as a docs source. Collection documents belong in entry folders such as
+`.studies/2026-11-11-topic/README.md`; docs may be `docs/guide.md` or `docs/topic/README.md`.
+The adapter uses the current working directory as the project root and reads no env files.
+
+Open **http://127.0.0.1:4317/**. The example's configured default port is **4317** and the server's
+default bind address is **127.0.0.1**. Override the port with `node knowledge-dashboard.mjs --port 4318`
+or `KNOWLEDGE_DASHBOARD_PORT`; there is no package-wide default port or CLI binary, so the copied
+adapter supplies it. The bundled viewer sends the required API header. All content restrictions
+below still apply, including the narrow opt-in for hidden collection roots.
+
+Git-tag installs use the committed ESM JavaScript and declarations in `dist/`, bundled assets, and
+examples, with no build step or install script. This kit has no core or other runtime dependency.
 
 ## When To Use
 
@@ -87,6 +107,8 @@ npm ci --ignore-scripts
 npm run type-check
 npm test
 npm run build
+npm run lint
+npm run check:dist
 ```
 
 The package has no runtime dependencies and no install hook of its own. Its development dependency
@@ -283,8 +305,7 @@ timeouts do not interrupt a synchronous scan. This helper has no rate limit, aut
 Run `npm ci --ignore-scripts`, `npm run build`, `npm run type-check`, and `npm test`. The package has
 **no runtime dependencies and no install hook in this package**. Development dependencies contain
 transitive install hooks, so development installs use `npm ci --ignore-scripts`. `dist/` is committed
-and must equal a fresh build. The declared engine stays Node 24 (`>=24.11.1 <25`); compatibility checks
-on Node 22 and 26 do not expand that support promise.
+and must equal a fresh build. The supported engine range is `>=22.0.0 <27`; checks run on Node 22, 24 and 26.
 
 Tests use synthetic temporary files only, real ephemeral HTTP listeners, raw request targets, scan
 membership/search-text non-disclosure assertions, non-empty positive controls, hard links, changed

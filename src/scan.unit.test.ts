@@ -38,7 +38,7 @@ afterEach(() => {
   }
 });
 
-test("knowledgeDashboardKitScanAll indexes collections and docs sources", () => {
+void test("knowledgeDashboardKitScanAll indexes collections and docs sources", () => {
   const projectRoot = makeProjectRoot();
   const studyDir = path.join(projectRoot, "studies", "2026-05-20-runtime-study");
   const docsDir = path.join(projectRoot, "docs", "operators");
@@ -78,7 +78,7 @@ test("knowledgeDashboardKitScanAll indexes collections and docs sources", () => 
   assert.equal(docs?.title, "Operator Guide");
 });
 
-test("hidden-root permission belongs only to the exact collection alongside nested and visible collections", () => {
+void test("hidden-root permission belongs only to the exact collection alongside nested and visible collections", () => {
   const projectRoot = makeProjectRoot();
   for (const directory of [".studies/public-entry", ".studies/nested/private-entry", "studies/visible-entry"]) {
     fs.mkdirSync(path.join(projectRoot, directory), { recursive: true });

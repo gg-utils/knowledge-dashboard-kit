@@ -1,58 +1,64 @@
 {
   "name": "@gg-utils/knowledge-dashboard-kit",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
   "description": "Config-driven knowledge dashboard scanning and HTTP server helpers.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./port-config": {
-      "types": "./src/port-config.ts",
-      "default": "./src/port-config.ts"
+      "types": "./dist/port-config.d.ts",
+      "default": "./dist/port-config.js"
     },
     "./scan": {
-      "types": "./src/scan.ts",
-      "default": "./src/scan.ts"
+      "types": "./dist/scan.d.ts",
+      "default": "./dist/scan.js"
     },
     "./server": {
-      "types": "./src/server.ts",
-      "default": "./src/server.ts"
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
     },
     "./types": {
-      "types": "./src/types.ts",
-      "default": "./src/types.ts"
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
     },
     "./package.json": "./package.json"
   },
   "files": [
     "assets/",
     "dist/",
-    "src/",
-    "!src/**/*.unit.test.ts",
     "README.md",
-    "tsconfig.json",
-    "tsconfig.build.json"
+    "LICENSE",
+    "examples/"
   ],
   "engines": {
-    "node": ">=24.11.1 <25",
+    "node": ">=22.0.0 <27",
     "npm": ">=9.0.0"
   },
   "packageManager": "npm@11.12.1",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "type-check": "tsc --noEmit -p tsconfig.json",
-    "test": "tsx --test \"src/**/*.unit.test.ts\""
+    "test": "tsx --test \"src/**/*.unit.test.ts\"",
+    "lint": "eslint --max-warnings 0 .",
+    "check:dist": "node scripts/check-dist.mjs"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "tsx": "^4.0.0",
-    "typescript": "^5.0.0"
+    "@eslint/js": "9.39.5",
+    "@types/node": "22.20.5",
+    "eslint": "9.39.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gg-utils/knowledge-dashboard-kit.git"
   }
 }

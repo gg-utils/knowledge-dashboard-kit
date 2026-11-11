@@ -8,6 +8,13 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.unit.test.ts", "dist", "node_modules"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "src/**/*.unit.test.ts",
+    "dist",
+    "node_modules",
+    "src/test-config.unit.ts"
+  ]
 }
