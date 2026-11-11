@@ -87,3 +87,47 @@ test("every bundled API call sends the dashboard header and scan errors appear i
   for (const entry of requests) assert.equal(entry.headers["X-Knowledge-Dashboard"], "1");
   assert.equal([...script.matchAll(/\bfetch\(/gu)].length, requests.length);
 });
+
+test("a changed document shows an unavailable state whose Refresh action rescans and reloads", async () => {
+  const html = fs.readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
+  const script = html.match(/<script>([\s\S]*?)<\/script>/u)?.[1];
+  assert.ok(script);
+  const nodes: { textContent?: string; attributes: Record<string, string> }[] = [];
+  const requests: string[] = [];
+  let click: ((event: unknown) => void) | undefined;
+  const context = vm.createContext({
+    fetch: async (target: string) => {
+      requests.push(target);
+      return target === "/api/entries"
+        ? { ok: true, json: async () => ({ entries: [], counts: {} }) }
+        : { ok: false, status: 409, text: async () => { throw new Error("Changed content must not be read"); } };
+    },
+    document: {
+      getElementById: () => ({ replaceChildren() { nodes.length = 0; }, appendChild(node: typeof nodes[number]) { nodes.push(node); } }),
+      createElement: () => ({ attributes: {}, setAttribute(this: typeof nodes[number], key: string, value: string) { this.attributes[key] = value; } }),
+      addEventListener: (event: string, handler: typeof click) => { if (event === "click") click = handler; },
+    },
+  });
+  vm.runInContext(`
+    let allEntries; let rawContent; let activeTab = "rendered"; let selectedFile = "guide.md";
+    let focusedCol = 3; let reloaded = 0;
+    function renderTypeNav() {} function applyFilters() {} function setFocusedCol() {}
+    function applyHash() { reloaded++; }
+    ${script.slice(script.indexOf("async function fetchEntries("), script.indexOf("// == Render: Type nav"))}
+    ${script.slice(script.indexOf("/**\n * Displays source"), script.indexOf("// == Interactions"))}
+    ${script.slice(script.indexOf("// Actions use data attributes"), script.indexOf("// == Init"))}
+  `, context);
+  for (const tab of ["rendered", "source"]) {
+    context.tab = tab;
+    await vm.runInContext('fetchContent("docs", "guide.md").then(content => { rawContent = content; activeTab = tab; renderContentBody(); })', context);
+    assert.equal(nodes.length, 2);
+    assert.match(nodes[0].textContent ?? "", /unavailable.*changed since the last scan.*Refresh to rescan and reload/u);
+    assert.equal(nodes[1].textContent, "Refresh");
+    assert.equal(nodes[1].attributes["data-action"], "refresh");
+  }
+  assert.ok(click);
+  click({ target: { closest: () => ({ dataset: { action: nodes[1].attributes["data-action"] } }) } });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(requests.at(-1), "/api/entries");
+  assert.equal(vm.runInContext("reloaded", context), 1);
+});

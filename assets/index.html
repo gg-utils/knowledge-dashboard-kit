@@ -614,8 +614,10 @@ async function fetchEntries() {
   setFocusedCol(focusedCol);
 }
 
+/** Fetches document text, or null when its scan-time identity has changed. */
 async function fetchContent(entryPath, file) {
   const res = await fetch(`/api/entry-content?path=${encodeURIComponent(entryPath)}&file=${encodeURIComponent(file)}`, { headers: { "X-Knowledge-Dashboard": "1" } });
+  if (res.status === 409) return null;
   if (!res.ok) return "Failed to load file.";
   return await res.text();
 }
@@ -839,6 +841,18 @@ function renderContentBody() {
   const area = document.getElementById("contentArea");
   if (!area) return;
   area.replaceChildren();
+  if (rawContent === null) {
+    const message = document.createElement("div");
+    message.className = "content-source";
+    message.textContent = "File unavailable: it changed since the last scan. Refresh to rescan and reload it.";
+    const refresh = document.createElement("button");
+    refresh.className = "btn-sm";
+    refresh.textContent = "Refresh";
+    refresh.setAttribute("data-action", "refresh");
+    area.appendChild(message);
+    area.appendChild(refresh);
+    return;
+  }
   if (activeTab === "source" || !/\.mdx?$/i.test(selectedFile || "")) {
     const source = document.createElement("div");
     source.className = "content-source";
@@ -1299,6 +1313,7 @@ document.addEventListener("click", (event) => {
     case "copy-path": copyText(data.path, target); break;
     case "copy-content": copyMarkdown(target); break;
     case "tab": switchTab(data.tab); break;
+    case "refresh": fetchEntries(); break;
   }
 });
 document.addEventListener("change", (event) => {

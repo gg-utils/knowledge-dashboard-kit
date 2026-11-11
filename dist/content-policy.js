@@ -98,7 +98,7 @@ export function knowledgeDashboardKitResolveSafePath(projectRoot, relative, kind
  * Reads a bounded regular document, checking scan identity and all ancestors before and after.
  * @param projectRoot - Trusted root containing publishable documents.
  * @param relative - Exact canonical root-relative filename.
- * @param options - Validated root exceptions, scan identity, and optional scan-budget reservation.
+ * @param options - Root exceptions, scan identity, optional change notification and scan budget.
  * @returns UTF-8 text, stat, and identities, or null for denied or changed objects.
  * @throws If the caller's budget reservation rejects the upcoming read.
  */
@@ -107,15 +107,22 @@ export function knowledgeDashboardKitReadDocument(projectRoot, relative, options
     if (!knowledgeDashboardKitIsDocumentPath(relative, hiddenRoots))
         return null;
     const resolved = knowledgeDashboardKitResolveSafePath(projectRoot, relative, "file", hiddenRoots);
-    if (resolved === null || (options.expectedIdentity !== undefined && !sameIdentity(resolved.identity, options.expectedIdentity)))
+    if (resolved === null)
         return null;
+    if (options.expectedIdentity !== undefined && !sameIdentity(resolved.identity, options.expectedIdentity)) {
+        options.onIdentityChange?.();
+        return null;
+    }
     options.beforeRead?.(resolved.stat.size);
     let descriptor;
     try {
         descriptor = fs.openSync(resolved.realPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
         const stat = fs.fstatSync(descriptor);
-        if (!stat.isFile() || stat.nlink !== 1 || stat.size !== resolved.stat.size ||
-            stat.dev !== resolved.stat.dev || stat.ino !== resolved.stat.ino)
+        if (stat.dev !== resolved.stat.dev || stat.ino !== resolved.stat.ino) {
+            options.onIdentityChange?.();
+            return null;
+        }
+        if (!stat.isFile() || stat.nlink !== 1 || stat.size !== resolved.stat.size)
             return null;
         // Read at most the reserved size. Growth is rejected by the final descriptor check.
         const buffer = Buffer.alloc(stat.size);
@@ -128,8 +135,11 @@ export function knowledgeDashboardKitReadDocument(projectRoot, relative, options
         }
         const after = fs.fstatSync(descriptor);
         const current = knowledgeDashboardKitResolveSafePath(projectRoot, relative, "file", hiddenRoots);
-        if (length !== stat.size || after.size !== stat.size || after.nlink !== 1 || current === null ||
-            !sameIdentity(current.identity, resolved.identity))
+        if (current !== null && !sameIdentity(current.identity, resolved.identity)) {
+            options.onIdentityChange?.();
+            return null;
+        }
+        if (length !== stat.size || after.size !== stat.size || after.nlink !== 1 || current === null)
             return null;
         return { content: buffer.toString("utf8"), stat, identity: resolved.identity };
     }
