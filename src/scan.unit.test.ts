@@ -77,3 +77,26 @@ test("knowledgeDashboardKitScanAll indexes collections and docs sources", () => 
   assert.equal(docs?.slug, "runtime/docs/operators/");
   assert.equal(docs?.title, "Operator Guide");
 });
+
+test("hidden-root permission belongs only to the exact collection alongside nested and visible collections", () => {
+  const projectRoot = makeProjectRoot();
+  for (const directory of [".studies/public-entry", ".studies/nested/private-entry", "studies/visible-entry"]) {
+    fs.mkdirSync(path.join(projectRoot, directory), { recursive: true });
+    fs.writeFileSync(path.join(projectRoot, directory, "guide.md"), `Document in ${directory}`);
+  }
+  const result = knowledgeDashboardKitScanAll({
+    projectRoot,
+    config: { ...knowledgeDashboardKitTestConfig, docsSources: [], allowedHiddenCollectionRoots: [".studies"],
+      collections: [
+        { type: "studies", dir: ".studies", color: "blue", icon: "document" },
+        { type: "plans", dir: ".studies/nested", color: "blue", icon: "document" },
+        { type: "specs", dir: "studies", color: "blue", icon: "document" },
+      ] },
+  });
+  assert.deepEqual(result.entries.map((entry) => [entry.type, entry.dirPath, entry.files]), [
+    ["studies", ".studies/public-entry", ["guide.md"]],
+    ["specs", "studies/visible-entry", ["guide.md"]],
+  ]);
+  assert.equal(result.counts.plans, 0);
+  assert.ok(!JSON.stringify(result).includes("private-entry"));
+});

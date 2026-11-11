@@ -15,7 +15,7 @@ import fs from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { knowledgeDashboardKitIsDocumentPath, knowledgeDashboardKitIsSafeRelativePath, knowledgeDashboardKitReadDocument, knowledgeDashboardKitHiddenRoots, knowledgeDashboardKitScanIdentities, } from "./content-policy.js";
+import { knowledgeDashboardKitIsDocumentPath, knowledgeDashboardKitIsSafeRelativePath, knowledgeDashboardKitReadDocument, knowledgeDashboardKitScanIdentities, } from "./content-policy.js";
 import { knowledgeDashboardKitScanAll } from "./scan.js";
 const DEFAULT_SERVER_HOOKS = {
     log: (line) => console.log(line),
@@ -200,7 +200,6 @@ export function knowledgeDashboardKitStartServer(options) {
         logger: hooks,
         projectRoot,
     });
-    const hiddenRoots = knowledgeDashboardKitHiddenRoots(options.config);
     let allowedContent = knowledgeDashboardKitScanIdentities.get(cachedData);
     const server = createServer((req, res) => {
         knowledgeDashboardKitSetResponseHeaders(res);
@@ -267,11 +266,13 @@ export function knowledgeDashboardKitStartServer(options) {
             const entryPath = url.searchParams.get("path");
             const file = url.searchParams.get("file");
             const relative = entryPath === "" ? file : `${entryPath}/${file}`;
+            const published = allowedContent?.get(JSON.stringify([entryPath, file]));
+            const hiddenRoots = published?.hiddenRoots ?? new Set();
             if (entryPath === null || file === null || relative === null ||
                 url.searchParams.getAll("path").length !== 1 || url.searchParams.getAll("file").length !== 1 ||
                 !knowledgeDashboardKitIsSafeRelativePath(entryPath, hiddenRoots) ||
                 !knowledgeDashboardKitIsDocumentPath(relative, hiddenRoots) ||
-                !allowedContent?.has(JSON.stringify([entryPath, file]))) {
+                published === undefined) {
                 knowledgeDashboardKitWriteJson({ body: { error: "Not found" }, res, statusCode: 404 });
                 return;
             }
@@ -281,8 +282,7 @@ export function knowledgeDashboardKitStartServer(options) {
                 knowledgeDashboardKitWriteJson({ body: { error: "Not found" }, res, statusCode: 404 });
                 return;
             }
-            const expectedIdentity = allowedContent?.get(JSON.stringify([entryPath, file]));
-            const document = knowledgeDashboardKitReadDocument(projectRoot, relative, { hiddenRoots, expectedIdentity });
+            const document = knowledgeDashboardKitReadDocument(projectRoot, relative, { hiddenRoots, expectedIdentity: published.identity });
             if (document === null) {
                 knowledgeDashboardKitWriteJson({ body: { error: "Not found" }, res, statusCode: 404 });
                 return;

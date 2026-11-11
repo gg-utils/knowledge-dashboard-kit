@@ -16,7 +16,7 @@ import {
   knowledgeDashboardKitReadDocument,
   knowledgeDashboardKitHiddenRoots,
   knowledgeDashboardKitScanIdentities,
-  type KnowledgeDashboardKit_DocumentIdentity,
+  type KnowledgeDashboardKit_PublishedDocument,
   knowledgeDashboardKitResolveSafePath,
 } from "./content-policy.js";
 import type {
@@ -149,7 +149,7 @@ type ScanContext = {
   readonly hiddenRoots: ReadonlySet<string>;
   readonly maxEntries: number;
   readonly maxTotalBytes: number;
-  readonly documents: Map<string, KnowledgeDashboardKit_DocumentIdentity>;
+  readonly documents: Map<string, KnowledgeDashboardKit_PublishedDocument>;
   bytes: number;
   entries: number;
 };
@@ -205,10 +205,11 @@ function directoryItems(context: ScanContext, relative: string, hiddenRoots: Rea
  * @throws If the next eligible document would exceed the byte budget.
  */
 function scanDocument(context: ScanContext, relative: string, hiddenRoots: ReadonlySet<string>) {
-  return knowledgeDashboardKitReadDocument(context.projectRoot, relative, { hiddenRoots, beforeRead: (bytes) => {
+  const document = knowledgeDashboardKitReadDocument(context.projectRoot, relative, { hiddenRoots, beforeRead: (bytes) => {
     if (bytes > context.maxTotalBytes - context.bytes) throw new ScanBudgetExceeded();
     context.bytes += bytes;
   } });
+  return document === null ? null : { ...document, hiddenRoots };
 }
 
 /**
@@ -223,7 +224,9 @@ function publishEntry(context: ScanContext, entry: KnowledgeDashboardKit_Entry,
   documents: ReadonlyMap<string, NonNullable<ReturnType<typeof scanDocument>>>): KnowledgeDashboardKit_Entry {
   if (++context.entries > context.maxEntries) throw new ScanBudgetExceeded();
   for (const [file, document] of documents) {
-    context.documents.set(JSON.stringify([entry.dirPath, file]), document.identity);
+    context.documents.set(JSON.stringify([entry.dirPath, file]), {
+      identity: document.identity, hiddenRoots: document.hiddenRoots,
+    });
   }
   return entry;
 }
@@ -255,13 +258,14 @@ function bundleDocuments(context: ScanContext, relative: string, hiddenRoots: Re
  */
 function scanCollection(context: ScanContext, collection: KnowledgeDashboardKit_CollectionConfig): KnowledgeDashboardKit_Entry[] {
   const relative = collection.dir === "." ? "" : collection.dir;
+  const hiddenRoots = new Set(context.hiddenRoots.has(relative) ? [relative] : []);
   const entries: KnowledgeDashboardKit_Entry[] = [];
-  const slugs = directoryItems(context, relative, context.hiddenRoots)
+  const slugs = directoryItems(context, relative, hiddenRoots)
     .filter((item) => item.isDirectory() && !item.name.startsWith(".") && !item.name.startsWith("_"))
     .map((item) => item.name).sort().reverse();
   for (const slug of slugs) {
     const dirPath = [relative, slug].filter(Boolean).join("/");
-    const documents = bundleDocuments(context, dirPath, context.hiddenRoots);
+    const documents = bundleDocuments(context, dirPath, hiddenRoots);
     const files = [...documents.keys()];
     if (files.length === 0) continue;
     const mainFile = knowledgeDashboardKitFindCollectionMainFile(files) ?? files[0];
