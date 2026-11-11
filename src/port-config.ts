@@ -18,7 +18,13 @@ import type {
   KnowledgeDashboardKit_ResolvePortOptions,
 } from "./types.js";
 
-/** Parses a non-empty decimal port string and enforces the TCP port range. */
+/**
+ * Parses a non-empty decimal port string and enforces the TCP port range.
+ *
+ * @param options - Raw port value and error-label context.
+ * @returns A validated port from 1 through 65535.
+ * @throws If the input is not a decimal port in the valid range.
+ */
 export function knowledgeDashboardKitParsePositivePort(options: {
   readonly errorPrefix: string;
   readonly label: string;
@@ -40,7 +46,12 @@ export function knowledgeDashboardKitParsePositivePort(options: {
   return parsed;
 }
 
-/** Normalizes a raw `.env` value segment by trimming and removing one wrapping quote pair. */
+/**
+ * Normalizes a raw `.env` value segment by trimming and removing one wrapping quote pair.
+ *
+ * @param rawValue - Assignment value to normalize.
+ * @returns The trimmed value with a matching outer quote pair removed.
+ */
 export function knowledgeDashboardKitStripEnvValue(rawValue: string): string {
   const normalized = rawValue.trim();
   if (
@@ -52,7 +63,13 @@ export function knowledgeDashboardKitStripEnvValue(rawValue: string): string {
   return normalized;
 }
 
-/** Scans a local env file for a `KEY=value` assignment when the path exists. */
+/**
+ * Scans a local env file for a `KEY=value` assignment when the path exists.
+ *
+ * @param options - Explicitly selected configuration file and assignment key.
+ * @returns The last matching value, or null when the file or key is absent.
+ * @throws If the selected file cannot be read.
+ */
 export function knowledgeDashboardKitReadEnvFileValue(options: {
   readonly envFilePath: string | null;
   readonly key: string;
@@ -169,7 +186,13 @@ function knowledgeDashboardKitAssertRealmPortSafe(options: {
   }
 }
 
-/** Resolves the dashboard bind port from CLI flags, active env files, process env, or defaults. */
+/**
+ * Resolves the dashboard bind port from CLI flags, active env files, process env, or defaults.
+ *
+ * @param options - Explicit configuration, arguments, environment, and active file paths.
+ * @returns The validated port and its resolution source.
+ * @throws If a port is invalid or a non-canonical realm would inherit an unsafe default.
+ */
 export function knowledgeDashboardKitResolvePort(
   options: KnowledgeDashboardKit_ResolvePortOptions,
 ): KnowledgeDashboardKit_ResolvedPort {

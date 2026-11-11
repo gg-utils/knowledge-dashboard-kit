@@ -13,11 +13,22 @@
  */
 import { type Server } from "node:http";
 import type { KnowledgeDashboardKit_Config, KnowledgeDashboardKit_StartServerOptions } from "./types.js";
-/** Computes the HTTPS realm URL advertised on a configured local router. */
+/**
+ * Computes the HTTPS realm URL advertised on a configured local router.
+ *
+ * @param options - Realm configuration and injected environment values.
+ * @returns The advertised router URL; this does not automatically trust its Host.
+ */
 export declare function knowledgeDashboardKitBuildSubdomainUrl(options: {
     readonly config: KnowledgeDashboardKit_Config;
     readonly env: Record<string, string | undefined>;
 }): string;
-/** Starts the dashboard HTTP server on `127.0.0.1`. */
+/**
+ * Starts a loopback dashboard with scan-based content access and strict request validation.
+ *
+ * @param options - Trusted configuration, filesystem root, bind settings, and hooks.
+ * @returns The HTTP server; callers own shutdown and server error handling.
+ * @throws If an explicitly allowed Host authority is invalid.
+ */
 export declare function knowledgeDashboardKitStartServer(options: KnowledgeDashboardKit_StartServerOptions): Server;
 //# sourceMappingURL=server.d.ts.map

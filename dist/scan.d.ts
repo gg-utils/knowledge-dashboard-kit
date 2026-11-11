@@ -15,28 +15,53 @@ import type { KnowledgeDashboardKit_CollectionConfig, KnowledgeDashboardKit_Conf
 export type KnowledgeDashboardKit_ScanLogger = {
     readonly error: (line: string, error?: unknown) => void;
 };
-/** Parses the first `---` fence in markdown into simple string key/value pairs. */
+/**
+ * Parses the first `---` fence in markdown into simple string key/value pairs.
+ *
+ * @param content - UTF-8 Markdown text.
+ * @returns Parsed string values, or an empty record when frontmatter is absent.
+ */
 export declare function knowledgeDashboardKitParseFrontmatter(content: string): Record<string, string>;
-/** Builds a compact plain-text preview for client-side search after dropping frontmatter. */
+/**
+ * Builds a compact plain-text preview for client-side search after dropping frontmatter.
+ *
+ * @param options - Document text and optional maximum preview length.
+ * @returns A trimmed preview with line breaks collapsed.
+ */
 export declare function knowledgeDashboardKitExtractSearchText(options: {
     readonly content: string;
     readonly maxLength?: number;
 }): string;
-/** Walks one dated-folder collection under the project root. */
+/**
+ * Walks one dated-folder collection under the project root.
+ *
+ * @param options - Trusted collection configuration, root, and optional logging hook.
+ * @returns Entries containing only readable documents allowed by the mandatory policy.
+ */
 export declare function knowledgeDashboardKitScanCollection(options: {
     readonly collection: KnowledgeDashboardKit_CollectionConfig;
     readonly config: KnowledgeDashboardKit_Config;
     readonly logger?: KnowledgeDashboardKit_ScanLogger;
     readonly projectRoot: string;
 }): KnowledgeDashboardKit_Entry[];
-/** Indexes markdown under a single docs source. */
+/**
+ * Indexes markdown under a single docs source.
+ *
+ * @param options - Trusted source configuration, root, and optional logging hook.
+ * @returns Flat document entries and immediate subfolder bundles allowed by the policy.
+ */
 export declare function knowledgeDashboardKitScanDocsSource(options: {
     readonly config: KnowledgeDashboardKit_Config;
     readonly logger?: KnowledgeDashboardKit_ScanLogger;
     readonly projectRoot: string;
     readonly source: KnowledgeDashboardKit_DocsSourceConfig;
 }): KnowledgeDashboardKit_Entry[];
-/** Refreshes the full in-memory index for all configured collections and docs sources. */
+/**
+ * Refreshes the full in-memory index for all configured collections and docs sources.
+ *
+ * @param options - Trusted dashboard configuration, root, and optional logging hook.
+ * @returns The current safe document index, timestamp, and counts by entry type.
+ */
 export declare function knowledgeDashboardKitScanAll(options: {
     readonly config: KnowledgeDashboardKit_Config;
     readonly logger?: KnowledgeDashboardKit_ScanLogger;
