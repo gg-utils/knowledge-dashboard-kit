@@ -136,11 +136,12 @@ function directoryItems(context, relative, hiddenRoots) {
  * @throws If the next eligible document would exceed the byte budget.
  */
 function scanDocument(context, relative, hiddenRoots) {
-    return knowledgeDashboardKitReadDocument(context.projectRoot, relative, { hiddenRoots, beforeRead: (bytes) => {
+    const document = knowledgeDashboardKitReadDocument(context.projectRoot, relative, { hiddenRoots, beforeRead: (bytes) => {
             if (bytes > context.maxTotalBytes - context.bytes)
                 throw new ScanBudgetExceeded();
             context.bytes += bytes;
         } });
+    return document === null ? null : { ...document, hiddenRoots };
 }
 /**
  * Publishes a nonempty entry and records only its exact eligible document identities.
@@ -154,7 +155,9 @@ function publishEntry(context, entry, documents) {
     if (++context.entries > context.maxEntries)
         throw new ScanBudgetExceeded();
     for (const [file, document] of documents) {
-        context.documents.set(JSON.stringify([entry.dirPath, file]), document.identity);
+        context.documents.set(JSON.stringify([entry.dirPath, file]), {
+            identity: document.identity, hiddenRoots: document.hiddenRoots,
+        });
     }
     return entry;
 }
@@ -186,13 +189,14 @@ function bundleDocuments(context, relative, hiddenRoots) {
  */
 function scanCollection(context, collection) {
     const relative = collection.dir === "." ? "" : collection.dir;
+    const hiddenRoots = new Set(context.hiddenRoots.has(relative) ? [relative] : []);
     const entries = [];
-    const slugs = directoryItems(context, relative, context.hiddenRoots)
+    const slugs = directoryItems(context, relative, hiddenRoots)
         .filter((item) => item.isDirectory() && !item.name.startsWith(".") && !item.name.startsWith("_"))
         .map((item) => item.name).sort().reverse();
     for (const slug of slugs) {
         const dirPath = [relative, slug].filter(Boolean).join("/");
-        const documents = bundleDocuments(context, dirPath, context.hiddenRoots);
+        const documents = bundleDocuments(context, dirPath, hiddenRoots);
         const files = [...documents.keys()];
         if (files.length === 0)
             continue;

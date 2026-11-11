@@ -328,6 +328,40 @@ function hiddenConfig(names: readonly string[]): KnowledgeDashboardKit_Config {
     })) };
 }
 
+test("hidden-root permission does not reach a nested collection while exact and visible collections still serve", async (t) => {
+  const fixture = await makeFixture(t, { config: {
+    ...knowledgeDashboardKitTestConfig, docsSources: [], allowedHiddenCollectionRoots: [".studies"],
+    collections: [
+      { type: "studies", dir: ".studies", color: "blue", icon: "document" },
+      { type: "plans", dir: ".studies/nested", color: "blue", icon: "document" },
+      { type: "specs", dir: "studies", color: "blue", icon: "document" },
+    ],
+  } });
+  for (const [directory, content] of [[".studies/public-entry", "Exact hidden collection"],
+    [".studies/nested/private-entry", FAKE_SECRET], ["studies/visible-entry", "Visible collection"]]) {
+    fs.mkdirSync(path.join(fixture.root, directory), { recursive: true });
+    fs.writeFileSync(path.join(fixture.root, directory, "guide.md"), content);
+  }
+  for (let refresh = 0; refresh < 2; refresh++) {
+    const response = await fixture.get("/api/entries");
+    assert.equal(response.status, 200);
+    const scan = JSON.parse(response.body) as { entries: { type: string; dirPath: string; files: string[] }[] };
+    assert.deepEqual(scan.entries.map((entry) => [entry.type, entry.dirPath, entry.files]), [
+      ["studies", ".studies/public-entry", ["guide.md"]],
+      ["specs", "studies/visible-entry", ["guide.md"]],
+    ]);
+    const denied = await fixture.get(contentTarget(".studies/nested/private-entry", "guide.md"));
+    assert.equal(denied.status, 404);
+    assert.deepEqual(JSON.parse(denied.body), { error: "Not found" });
+    for (const [directory, content] of [[".studies/public-entry", "Exact hidden collection"],
+      ["studies/visible-entry", "Visible collection"]]) {
+      const document = await fixture.get(contentTarget(directory, "guide.md"));
+      assert.equal(document.status, 200);
+      assert.equal(document.body, content);
+    }
+  }
+});
+
 test("explicit hidden collection roots publish exact non-empty entries and retain all denies", async (t) => {
   const names = [".studies", ".plans", ".specs"];
   const fixture = await makeFixture(t, { config: hiddenConfig(names) });

@@ -8,8 +8,13 @@ export type KnowledgeDashboardKit_DocumentIdentity = readonly {
     readonly dev: number;
     readonly ino: number;
 }[];
-/** Private scan metadata; filesystem identities never enter a serialized API response. */
-export declare const knowledgeDashboardKitScanIdentities: WeakMap<KnowledgeDashboardKit_ScanResult, ReadonlyMap<string, KnowledgeDashboardKit_DocumentIdentity>>;
+/** Private document authorization records the exact policy used by its publishing collection. */
+export type KnowledgeDashboardKit_PublishedDocument = {
+    readonly identity: KnowledgeDashboardKit_DocumentIdentity;
+    readonly hiddenRoots: ReadonlySet<string>;
+};
+/** Private scan metadata; identities and collection permissions never enter an API response. */
+export declare const knowledgeDashboardKitScanIdentities: WeakMap<KnowledgeDashboardKit_ScanResult, ReadonlyMap<string, KnowledgeDashboardKit_PublishedDocument>>;
 /**
  * Validates explicit hidden collection names before scanning or starting a listener.
  * @param config - Trusted configuration containing the requested exception list.

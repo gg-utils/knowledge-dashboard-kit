@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 /** Maximum UTF-8 document size, enforced before and during every read (1 MiB). */
 export const KNOWLEDGE_DASHBOARD_MAX_DOCUMENT_BYTES = 1024 * 1024;
-/** Private scan metadata; filesystem identities never enter a serialized API response. */
+/** Private scan metadata; identities and collection permissions never enter an API response. */
 export const knowledgeDashboardKitScanIdentities = new WeakMap();
 /**
  * Validates explicit hidden collection names before scanning or starting a listener.
