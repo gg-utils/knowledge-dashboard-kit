@@ -13,6 +13,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import {
+  knowledgeDashboardKitReadDocument,
+  knowledgeDashboardKitResolveSafePath,
+} from "./content-policy.js";
 import type {
   KnowledgeDashboardKit_CollectionConfig,
   KnowledgeDashboardKit_CollectionType,
@@ -37,7 +41,12 @@ const DEFAULT_SCAN_LOGGER: KnowledgeDashboardKit_ScanLogger = {
   },
 };
 
-/** Parses the first `---` fence in markdown into simple string key/value pairs. */
+/**
+ * Parses the first `---` fence in markdown into simple string key/value pairs.
+ *
+ * @param content - UTF-8 Markdown text.
+ * @returns Parsed string values, or an empty record when frontmatter is absent.
+ */
 export function knowledgeDashboardKitParseFrontmatter(
   content: string,
 ): Record<string, string> {
@@ -70,7 +79,12 @@ export function knowledgeDashboardKitParseFrontmatter(
   return result;
 }
 
-/** Builds a compact plain-text preview for client-side search after dropping frontmatter. */
+/**
+ * Builds a compact plain-text preview for client-side search after dropping frontmatter.
+ *
+ * @param options - Document text and optional maximum preview length.
+ * @returns A trimmed preview with line breaks collapsed.
+ */
 export function knowledgeDashboardKitExtractSearchText(options: {
   readonly content: string;
   readonly maxLength?: number;
@@ -125,7 +139,12 @@ function knowledgeDashboardKitExtractCrossRefs(content: string): string[] {
   return refMatches === null ? [] : [...new Set(refMatches)];
 }
 
-/** Walks one dated-folder collection under the project root. */
+/**
+ * Walks one dated-folder collection under the project root.
+ *
+ * @param options - Trusted collection configuration, root, and optional logging hook.
+ * @returns Entries containing only readable documents allowed by the mandatory policy.
+ */
 export function knowledgeDashboardKitScanCollection(options: {
   readonly collection: KnowledgeDashboardKit_CollectionConfig;
   readonly config: KnowledgeDashboardKit_Config;
@@ -133,14 +152,22 @@ export function knowledgeDashboardKitScanCollection(options: {
   readonly projectRoot: string;
 }): KnowledgeDashboardKit_Entry[] {
   const logger = options.logger ?? DEFAULT_SCAN_LOGGER;
-  const collectionDir = path.join(options.projectRoot, options.collection.dir);
-  if (!fs.existsSync(collectionDir)) {
+  const collectionPath = options.collection.dir === "." ? "" : options.collection.dir;
+  const resolvedCollection = knowledgeDashboardKitResolveSafePath(options.projectRoot, collectionPath, "directory");
+  if (resolvedCollection === null) {
     return [];
   }
 
+  const collectionDir = resolvedCollection.realPath;
   const entries: KnowledgeDashboardKit_Entry[] = [];
-  const subdirs = fs
-    .readdirSync(collectionDir, { withFileTypes: true })
+  let collectionItems: fs.Dirent[];
+  try {
+    collectionItems = fs.readdirSync(collectionDir, { withFileTypes: true });
+  } catch {
+    logger.error("Failed to read collection directory.");
+    return [];
+  }
+  const subdirs = collectionItems
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
     .map((entry) => entry.name)
     .sort()
@@ -151,27 +178,32 @@ export function knowledgeDashboardKitScanCollection(options: {
       continue;
     }
 
-    const entryDir = path.join(collectionDir, slug);
+    const entryRelative = [collectionPath, slug].filter(Boolean).join("/");
+    const resolvedEntry = knowledgeDashboardKitResolveSafePath(options.projectRoot, entryRelative, "directory");
+    if (resolvedEntry === null) continue;
+    const entryDir = resolvedEntry.realPath;
     let allFiles: string[];
     try {
       allFiles = fs
         .readdirSync(entryDir, { withFileTypes: true })
         .filter((entry) => entry.isFile())
-        .map((entry) => entry.name);
-    } catch (error: unknown) {
-      logger.error(`Failed to read entry directory ${entryDir}:`, error);
+        .map((entry) => entry.name)
+        .filter((file) => knowledgeDashboardKitReadDocument(options.projectRoot, `${entryRelative}/${file}`) !== null);
+    } catch {
+      logger.error("Failed to read entry directory.");
       continue;
     }
 
+    if (allFiles.length === 0) continue;
     const mainFile = knowledgeDashboardKitFindCollectionMainFile(allFiles);
     let frontmatter: Record<string, string> = {};
     let mainContent = "";
     if (mainFile !== null) {
       try {
-        mainContent = fs.readFileSync(path.join(entryDir, mainFile), "utf8");
+        mainContent = knowledgeDashboardKitReadDocument(options.projectRoot, `${entryRelative}/${mainFile}`)?.content ?? "";
         frontmatter = knowledgeDashboardKitParseFrontmatter(mainContent);
-      } catch (error: unknown) {
-        logger.error(`Failed to read main file ${mainFile} in ${entryDir}:`, error);
+      } catch {
+        logger.error("Failed to read main document.");
       }
     }
 
@@ -191,10 +223,10 @@ export function knowledgeDashboardKitScanCollection(options: {
       fileCount: allFiles.length,
       mainFile,
       files: allFiles,
-      dirPath: `${options.collection.dir}/${slug}`,
+      dirPath: entryRelative,
       githubUrl: knowledgeDashboardKitGithubTreeUrl({
         config: options.config,
-        repoRelativePath: `${options.collection.dir}/${slug}`,
+        repoRelativePath: entryRelative,
       }),
       crossRefs: knowledgeDashboardKitExtractCrossRefs(mainContent),
       searchText: knowledgeDashboardKitExtractSearchText({ content: mainContent }),
@@ -204,40 +236,27 @@ export function knowledgeDashboardKitScanCollection(options: {
   return entries;
 }
 
-/** Collects one entry per top-level `.md` file under a docs source. */
+/** Collects one entry per top-level allowed document under a docs source. */
 function knowledgeDashboardKitCollectDocsFlatMarkdownEntries(options: {
   readonly config: KnowledgeDashboardKit_Config;
-  readonly docsDir: string;
+  readonly projectRoot: string;
   readonly items: readonly fs.Dirent[];
-  readonly logger: KnowledgeDashboardKit_ScanLogger;
   readonly source: KnowledgeDashboardKit_DocsSourceConfig;
 }): KnowledgeDashboardKit_Entry[] {
   const entries: KnowledgeDashboardKit_Entry[] = [];
 
   for (const item of options.items) {
-    if (!item.isFile() || !item.name.endsWith(".md")) {
+    if (!item.isFile()) {
       continue;
     }
 
-    const filePath = path.join(options.docsDir, item.name);
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(filePath);
-    } catch (error: unknown) {
-      options.logger.error(`Failed to stat file ${filePath}:`, error);
-      continue;
-    }
+    const relative = [options.source.dir, item.name].filter(Boolean).join("/");
+    const document = knowledgeDashboardKitReadDocument(options.projectRoot, relative);
+    if (document === null) continue;
+    const { content: fileContent, stat } = document;
+    const frontmatter = knowledgeDashboardKitParseFrontmatter(fileContent);
 
-    let fileContent = "";
-    let frontmatter: Record<string, string> = {};
-    try {
-      fileContent = fs.readFileSync(filePath, "utf8");
-      frontmatter = knowledgeDashboardKitParseFrontmatter(fileContent);
-    } catch (error: unknown) {
-      options.logger.error(`Failed to read file ${filePath}:`, error);
-    }
-
-    const baseName = item.name.replace(/\.md$/, "");
+    const baseName = item.name.replace(/\.[^.]+$/, "");
     entries.push({
       type: "docs",
       slug: `${options.source.repoLabel}/${baseName}`,
@@ -275,8 +294,8 @@ function knowledgeDashboardKitResolveSubfolderDate(options: {
       if (stat.mtimeMs > latestMtime) {
         latestMtime = stat.mtimeMs;
       }
-    } catch (error: unknown) {
-      options.logger.error(`Failed to stat file ${filePath}:`, error);
+    } catch {
+      options.logger.error("Failed to inspect document.");
     }
   }
   return latestMtime > 0
@@ -287,7 +306,7 @@ function knowledgeDashboardKitResolveSubfolderDate(options: {
 /** Collects one bundled entry per immediate subdirectory of a docs source. */
 function knowledgeDashboardKitCollectDocsSubfolderBundleEntries(options: {
   readonly config: KnowledgeDashboardKit_Config;
-  readonly docsDir: string;
+  readonly projectRoot: string;
   readonly items: readonly fs.Dirent[];
   readonly logger: KnowledgeDashboardKit_ScanLogger;
   readonly source: KnowledgeDashboardKit_DocsSourceConfig;
@@ -299,15 +318,19 @@ function knowledgeDashboardKitCollectDocsSubfolderBundleEntries(options: {
       continue;
     }
 
-    const subDir = path.join(options.docsDir, item.name);
+    const repoRelativePath = [options.source.dir, item.name].filter(Boolean).join("/");
+    const resolvedSubdir = knowledgeDashboardKitResolveSafePath(options.projectRoot, repoRelativePath, "directory");
+    if (resolvedSubdir === null) continue;
+    const subDir = resolvedSubdir.realPath;
     let subFiles: string[];
     try {
       subFiles = fs
         .readdirSync(subDir, { withFileTypes: true })
         .filter((entry) => entry.isFile())
-        .map((entry) => entry.name);
-    } catch (error: unknown) {
-      options.logger.error(`Failed to read subdirectory ${subDir}:`, error);
+        .map((entry) => entry.name)
+        .filter((file) => knowledgeDashboardKitReadDocument(options.projectRoot, `${repoRelativePath}/${file}`) !== null);
+    } catch {
+      options.logger.error("Failed to read document directory.");
       continue;
     }
     if (subFiles.length === 0) {
@@ -322,14 +345,13 @@ function knowledgeDashboardKitCollectDocsSubfolderBundleEntries(options: {
     let frontmatter: Record<string, string> = {};
     if (mainFile !== null) {
       try {
-        mainContent = fs.readFileSync(path.join(subDir, mainFile), "utf8");
+        mainContent = knowledgeDashboardKitReadDocument(options.projectRoot, `${repoRelativePath}/${mainFile}`)?.content ?? "";
         frontmatter = knowledgeDashboardKitParseFrontmatter(mainContent);
-      } catch (error: unknown) {
-        options.logger.error(`Failed to read main file ${mainFile} in ${subDir}:`, error);
+      } catch {
+        options.logger.error("Failed to read main document.");
       }
     }
 
-    const repoRelativePath = `${options.source.dir}/${item.name}`;
     entries.push({
       type: "docs",
       slug: `${options.source.repoLabel}/${item.name}`,
@@ -359,7 +381,12 @@ function knowledgeDashboardKitCollectDocsSubfolderBundleEntries(options: {
   return entries;
 }
 
-/** Indexes markdown under a single docs source. */
+/**
+ * Indexes markdown under a single docs source.
+ *
+ * @param options - Trusted source configuration, root, and optional logging hook.
+ * @returns Flat document entries and immediate subfolder bundles allowed by the policy.
+ */
 export function knowledgeDashboardKitScanDocsSource(options: {
   readonly config: KnowledgeDashboardKit_Config;
   readonly logger?: KnowledgeDashboardKit_ScanLogger;
@@ -367,33 +394,34 @@ export function knowledgeDashboardKitScanDocsSource(options: {
   readonly source: KnowledgeDashboardKit_DocsSourceConfig;
 }): KnowledgeDashboardKit_Entry[] {
   const logger = options.logger ?? DEFAULT_SCAN_LOGGER;
-  const docsDir = path.join(options.projectRoot, options.source.dir);
-  if (!fs.existsSync(docsDir)) {
+  const source = { ...options.source, dir: options.source.dir === "." ? "" : options.source.dir };
+  const resolvedDocs = knowledgeDashboardKitResolveSafePath(options.projectRoot, source.dir, "directory");
+  if (resolvedDocs === null) {
     return [];
   }
 
+  const docsDir = resolvedDocs.realPath;
   let items: fs.Dirent[];
   try {
     items = fs.readdirSync(docsDir, { withFileTypes: true });
-  } catch (error: unknown) {
-    logger.error(`Failed to read docs directory ${docsDir}:`, error);
+  } catch {
+    logger.error("Failed to read docs directory.");
     return [];
   }
 
   return [
     ...knowledgeDashboardKitCollectDocsFlatMarkdownEntries({
       config: options.config,
-      docsDir,
       items,
-      logger,
-      source: options.source,
+      source,
+      projectRoot: options.projectRoot,
     }),
     ...knowledgeDashboardKitCollectDocsSubfolderBundleEntries({
       config: options.config,
-      docsDir,
       items,
       logger,
-      source: options.source,
+      source,
+      projectRoot: options.projectRoot,
     }),
   ];
 }
@@ -403,7 +431,12 @@ function knowledgeDashboardKitCreateEmptyCounts(): Record<KnowledgeDashboardKit_
   return { docs: 0, plans: 0, specs: 0, studies: 0 };
 }
 
-/** Refreshes the full in-memory index for all configured collections and docs sources. */
+/**
+ * Refreshes the full in-memory index for all configured collections and docs sources.
+ *
+ * @param options - Trusted dashboard configuration, root, and optional logging hook.
+ * @returns The current safe document index, timestamp, and counts by entry type.
+ */
 export function knowledgeDashboardKitScanAll(options: {
   readonly config: KnowledgeDashboardKit_Config;
   readonly logger?: KnowledgeDashboardKit_ScanLogger;

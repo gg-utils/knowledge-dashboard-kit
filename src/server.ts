@@ -15,11 +15,18 @@
 import fs from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import path from "node:path";
+import { createHash } from "node:crypto";
+import {
+  knowledgeDashboardKitIsDocumentPath,
+  knowledgeDashboardKitIsSafeRelativePath,
+  knowledgeDashboardKitReadDocument,
+} from "./content-policy.js";
 import type { ServerResponse } from "node:http";
 import { knowledgeDashboardKitScanAll } from "./scan.js";
 import type {
   KnowledgeDashboardKit_Config,
   KnowledgeDashboardKit_RequestLogRecord,
+  KnowledgeDashboardKit_ScanResult,
   KnowledgeDashboardKit_ServerHooks,
   KnowledgeDashboardKit_StartServerOptions,
 } from "./types.js";
@@ -81,7 +88,12 @@ function knowledgeDashboardKitListenPort(options: {
   return Number.isFinite(parsed) ? parsed : options.config.realmUrl.defaultListenPort;
 }
 
-/** Computes the HTTPS realm URL advertised on a configured local router. */
+/**
+ * Computes the HTTPS realm URL advertised on a configured local router.
+ *
+ * @param options - Realm configuration and injected environment values.
+ * @returns The advertised router URL; this does not automatically trust its Host.
+ */
 export function knowledgeDashboardKitBuildSubdomainUrl(options: {
   readonly config: KnowledgeDashboardKit_Config;
   readonly env: Record<string, string | undefined>;
@@ -117,39 +129,121 @@ function knowledgeDashboardKitWriteJson(options: {
   readonly statusCode: number;
 }): void {
   options.res.writeHead(options.statusCode, {
-    "Content-Type": "application/json",
+    "Content-Type": "application/json; charset=utf-8",
   });
   options.res.end(JSON.stringify(options.body));
 }
 
-/** Ensures requested entry content stays under the configured project root. */
-function knowledgeDashboardKitResolveEntryContentPath(options: {
-  readonly entryPath: string;
-  readonly file: string;
-  readonly projectRoot: string;
-}): string | null {
-  const projectRoot = path.resolve(options.projectRoot);
-  const fullPath = path.resolve(projectRoot, options.entryPath, options.file);
-  const relative = path.relative(projectRoot, fullPath);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    return null;
-  }
-  return fullPath;
+/**
+ * Builds exact directory/file keys from the latest scan without path normalization.
+ *
+ * @param data - Current scanner result.
+ * @returns Exact JSON-encoded directory/filename pairs eligible for content requests.
+ */
+function knowledgeDashboardKitContentAllowList(data: KnowledgeDashboardKit_ScanResult): Set<string> {
+  return new Set(data.entries.flatMap((entry) => entry.files.map((file) =>
+    JSON.stringify([entry.dirPath, file]))));
 }
 
-/** Starts the dashboard HTTP server on `127.0.0.1`. */
+/**
+ * Validates an explicitly trusted Host authority without accepting URL syntax or wildcards.
+ *
+ * @param host - Explicitly configured Host authority.
+ * @returns Whether the value is a canonical authority rather than a URL or wildcard.
+ */
+function knowledgeDashboardKitIsHostAuthority(host: string): boolean {
+  try {
+    const url = new URL(`http://${host}`);
+    return host.length > 0 && !host.includes("*") && url.host === host && url.username === "" &&
+      url.password === "" && url.pathname === "/" && url.search === "" && url.hash === "";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Requires an exact trusted Host and an absent or identical HTTP Origin on every route.
+ *
+ * @param req - Incoming HTTP request.
+ * @param server - Listening server, used to obtain the actual ephemeral port.
+ * @param bindHost - Explicit or default listening hostname.
+ * @param allowedHosts - Additional exact trusted authorities.
+ * @returns Whether both request headers satisfy the same-origin policy.
+ */
+function knowledgeDashboardKitIsTrustedRequest(
+  req: IncomingMessage,
+  server: Server,
+  bindHost: string,
+  allowedHosts: ReadonlySet<string>,
+): boolean {
+  const headerNames = req.rawHeaders.filter((_, index) => index % 2 === 0).map((name) => name.toLowerCase());
+  if (headerNames.filter((name) => name === "host").length !== 1 ||
+      headerNames.filter((name) => name === "origin").length > 1) return false;
+  const host = req.headers.host;
+  const address = server.address();
+  if (typeof host !== "string" || address === null || typeof address === "string") return false;
+  const localHost = bindHost === "::1" ? "[::1]" : bindHost;
+  const isLoopback = ["127.0.0.1", "::1", "localhost"].includes(bindHost);
+  if (!(isLoopback && host === `${localHost}:${String(address.port)}`) && !allowedHosts.has(host)) {
+    return false;
+  }
+  const origin = req.headers.origin;
+  return origin === undefined || origin === new URL(`http://${host}`).origin;
+}
+
+/**
+ * Restricts every response, with no executable content or ambient cross-origin access.
+ *
+ * @param res - Response receiving the restrictive default security and privacy headers.
+ * @returns Nothing.
+ */
+function knowledgeDashboardKitSetResponseHeaders(res: ServerResponse): void {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Frame-Options", "DENY");
+}
+
+/**
+ * Allows only the trusted shell's inline script blocks, while blocking event attributes.
+ *
+ * @param html - Trusted configured dashboard application shell.
+ * @returns The shell CSP, with hashes of its exact inline script bytes.
+ */
+function knowledgeDashboardKitShellCsp(html: string): string {
+  const hashes = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/giu)]
+    .map((match) => `'sha256-${createHash("sha256").update(match[1] ?? "").digest("base64")}'`);
+  return `default-src 'none'; script-src ${hashes.length > 0 ? hashes.join(" ") : "'none'"}; script-src-attr 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+}
+
+/**
+ * Starts a loopback dashboard with scan-based content access and strict request validation.
+ *
+ * @param options - Trusted configuration, filesystem root, bind settings, and hooks.
+ * @returns The HTTP server; callers own shutdown and server error handling.
+ * @throws If an explicitly allowed Host authority is invalid.
+ */
 export function knowledgeDashboardKitStartServer(
   options: KnowledgeDashboardKit_StartServerOptions,
 ): Server {
   const hooks = knowledgeDashboardKitResolveServerHooks(options.hooks);
   const projectRoot = path.resolve(options.projectRoot);
+  const bindHost = options.host ?? "127.0.0.1";
+  const allowedHosts = new Set(options.allowedHosts ?? []);
+  if ([...allowedHosts].some((host) => !knowledgeDashboardKitIsHostAuthority(host))) {
+    throw new Error("Invalid allowed Host authority.");
+  }
   let cachedData = knowledgeDashboardKitScanAll({
     config: options.config,
     logger: hooks,
     projectRoot,
   });
 
+  let allowedContent = knowledgeDashboardKitContentAllowList(cachedData);
+
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    knowledgeDashboardKitSetResponseHeaders(res);
     const requestStartTime = performance.now();
     res.on("finish", () => {
       const record: KnowledgeDashboardKit_RequestLogRecord = {
@@ -164,7 +258,23 @@ export function knowledgeDashboardKitStartServer(
       hooks.requestLog?.(record);
     });
 
-    const url = new URL(req.url ?? "/", `http://localhost:${String(options.port)}`);
+    if (!knowledgeDashboardKitIsTrustedRequest(req, server, bindHost, allowedHosts)) {
+      knowledgeDashboardKitWriteJson({ body: { error: "Forbidden" }, res, statusCode: 403 });
+      return;
+    }
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      res.setHeader("Allow", "GET, HEAD");
+      knowledgeDashboardKitWriteJson({ body: { error: "Method not allowed" }, res, statusCode: 405 });
+      return;
+    }
+    let url: URL;
+    try {
+      if (!req.url?.startsWith("/") || req.url.startsWith("//")) throw new Error("Invalid request target");
+      url = new URL(req.url, "http://127.0.0.1");
+    } catch {
+      knowledgeDashboardKitWriteJson({ body: { error: "Not found" }, res, statusCode: 404 });
+      return;
+    }
 
     if (url.pathname === "/api/status") {
       knowledgeDashboardKitWriteJson({
@@ -181,6 +291,7 @@ export function knowledgeDashboardKitStartServer(
         logger: hooks,
         projectRoot,
       });
+      allowedContent = knowledgeDashboardKitContentAllowList(cachedData);
       knowledgeDashboardKitWriteJson({ body: cachedData, res, statusCode: 200 });
       return;
     }
@@ -188,59 +299,45 @@ export function knowledgeDashboardKitStartServer(
     if (url.pathname === "/api/entry-content") {
       const entryPath = url.searchParams.get("path");
       const file = url.searchParams.get("file");
-      if (entryPath === null || file === null) {
-        knowledgeDashboardKitWriteJson({
-          body: { error: "Missing path or file param" },
-          res,
-          statusCode: 400,
-        });
+      const relative = entryPath === "" ? file : `${entryPath}/${file}`;
+      if (entryPath === null || file === null || relative === null ||
+          url.searchParams.getAll("path").length !== 1 || url.searchParams.getAll("file").length !== 1 ||
+          !knowledgeDashboardKitIsSafeRelativePath(entryPath) ||
+          !knowledgeDashboardKitIsDocumentPath(relative) ||
+          !allowedContent.has(JSON.stringify([entryPath, file]))) {
+        knowledgeDashboardKitWriteJson({ body: { error: "Not found" }, res, statusCode: 404 });
         return;
       }
-      const fullPath = knowledgeDashboardKitResolveEntryContentPath({
-        entryPath,
-        file,
-        projectRoot,
-      });
-      if (fullPath === null) {
-        knowledgeDashboardKitWriteJson({
-          body: { error: "Forbidden" },
-          res,
-          statusCode: 403,
-        });
+      const document = knowledgeDashboardKitReadDocument(projectRoot, relative);
+      if (document === null) {
+        knowledgeDashboardKitWriteJson({ body: { error: "Not found" }, res, statusCode: 404 });
         return;
       }
-      try {
-        const content = fs.readFileSync(fullPath, "utf8");
-        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(content);
-      } catch (error: unknown) {
-        hooks.error(`Failed to read entry content ${fullPath}:`, error);
-        knowledgeDashboardKitWriteJson({
-          body: { error: "File not found" },
-          res,
-          statusCode: 404,
-        });
-      }
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(document.content);
       return;
     }
 
     try {
       const html = fs.readFileSync(options.config.htmlFilePath, "utf8");
+      res.setHeader("Content-Security-Policy", knowledgeDashboardKitShellCsp(html));
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(html);
-    } catch (error: unknown) {
-      hooks.error(`Failed to load ${options.config.htmlFilePath}:`, error);
-      res.writeHead(500, { "Content-Type": "text/plain" });
+    } catch {
+      hooks.error("Failed to load dashboard HTML.");
+      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
       res.end("Failed to load dashboard HTML");
     }
   });
 
-  server.listen(options.port, "127.0.0.1", () => {
+  server.listen(options.port, bindHost, () => {
     const subdomainUrl = knowledgeDashboardKitBuildSubdomainUrl({
       config: options.config,
       env: options.env,
     });
-    const directUrl = `http://127.0.0.1:${String(options.port)}/`;
+    const address = server.address();
+    const port = address !== null && typeof address !== "string" ? address.port : options.port;
+    const directUrl = `http://${bindHost.includes(":") ? `[${bindHost}]` : bindHost}:${String(port)}/`;
     hooks.log(`\n  ${options.config.title}`);
     hooks.log("  ─────────────────────────");
     hooks.log(`  URL:      ${subdomainUrl}`);

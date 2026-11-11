@@ -126,6 +126,10 @@ export type KnowledgeDashboardKit_StartServerOptions = {
     readonly config: KnowledgeDashboardKit_Config;
     readonly env: Record<string, string | undefined>;
     readonly hooks?: Partial<KnowledgeDashboardKit_ServerHooks>;
+    /** Bind address; defaults to `127.0.0.1`. Non-loopback binding exposes indexed documents. */
+    readonly host?: string;
+    /** Additional exact Host authorities, including ports; no wildcard or implicit router trust. */
+    readonly allowedHosts?: readonly string[];
     readonly port: number;
     readonly projectRoot: string;
 };

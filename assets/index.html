@@ -5,10 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Knowledge Base Dashboard</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%231e293b'/%3E%3Cstop offset='100%25' stop-color='%230f172a'/%3E%3C/linearGradient%3E%3ClinearGradient id='fg' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23fbbf24'/%3E%3Cstop offset='100%25' stop-color='%23f59e0b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='6' fill='url(%23bg)' stroke='%23334155' stroke-width='1'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='central' text-anchor='middle' font-family='system-ui,sans-serif' font-weight='700' font-size='20' fill='url(%23fg)'%3ED%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets/styles/github-dark.min.css">
-<script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets/highlight.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
 <style>
   :root {
     --bg: #0f1117;
@@ -632,7 +628,7 @@ function renderTypeNav(counts) {
   ];
   document.getElementById("colTypes").innerHTML = types.map(t => `
     <div class="type-item ${activeFilter === t.key ? "active" : ""}"
-         data-type="${t.key}" onclick="selectType('${t.key}')">
+         data-type="${t.key}" data-action="type">
       <span class="type-icon">${t.icon}</span>
       <span class="type-label">${t.label}</span>
       <span class="type-count">${t.count}</span>
@@ -650,7 +646,7 @@ function sortBarHTML() {
   ];
   return `<div class="sort-bar">
     <span>Sort by</span>
-    <select class="sort-select" onchange="changeSort(this.value)">
+    <select class="sort-select" data-action="sort">
       ${options.map(o => `<option value="${o.value}" ${sortBy === o.value ? "selected" : ""}>${o.label}</option>`).join("")}
     </select>
     <span style="margin-left:auto">${filteredEntries.length} entries</span>
@@ -710,12 +706,12 @@ function renderEntryCard(e) {
   const sel = selectedEntry && selectedEntry.slug === e.slug && selectedEntry.type === e.type;
   return `
     <div class="entry-card ${sel ? "selected" : ""}"
-         onclick="selectEntry('${e.type}','${escA(e.slug)}')">
+         data-action="entry" data-type="${e.type}" data-slug="${esc(e.slug)}">
       <div class="entry-icon ${e.type}">${ICONS[e.type]}</div>
       <div class="entry-body">
         <div class="entry-title">${esc(e.title)}</div>
         <div class="entry-meta">
-          ${e.repo ? `<span class="tag" style="background:rgba(245,158,11,0.15);color:var(--orange)">${e.repo}</span>` : `<span class="tag ${statusClass(e.status)}">${e.status}</span>`}
+          ${e.repo ? `<span class="tag" style="background:rgba(245,158,11,0.15);color:var(--orange)">${esc(e.repo)}</span>` : `<span class="tag ${statusClass(e.status)}">${esc(e.status)}</span>`}
           <span>${e.fileCount} file${e.fileCount !== 1 ? "s" : ""}</span>
           ${e.crossRefs.length ? `<span style="color:var(--cyan)">${e.crossRefs.length} refs</span>` : ""}
         </div>
@@ -755,12 +751,12 @@ function renderFiles(entry) {
     <div class="file-panel-header">
       <div class="fp-title">${esc(entry.title)}</div>
       <div class="fp-meta">
-        <span class="tag ${statusClass(entry.status)}">${entry.status}</span>
-        <span>${entry.date}</span>
+        <span class="tag ${statusClass(entry.status)}">${esc(entry.status)}</span>
+        <span>${esc(entry.date)}</span>
         <span>${entry.fileCount} files</span>
       </div>
       <div class="fp-actions">
-        <a href="${entry.githubUrl}" target="_blank">Open on GitHub</a>
+        <a href="${esc(entry.githubUrl)}" target="_blank" rel="noopener noreferrer">Open on GitHub</a>
       </div>
     </div>
     <div class="file-section">
@@ -770,7 +766,7 @@ function renderFiles(entry) {
         const icon = f.endsWith(".md") ? "\ud83d\udcc4" : f.endsWith(".html") ? "\ud83c\udf10" : "\ud83d\udcc1";
         return `
         <div class="file-item ${active ? "active" : ""}"
-             onclick="selectFile('${escA(f)}')" title="${esc(f)}">
+             data-action="file" data-file="${esc(f)}" title="${esc(f)}">
           <span class="fi-icon">${icon}</span>
           <span class="fi-name">${esc(f)}</span>
         </div>`;
@@ -780,7 +776,7 @@ function renderFiles(entry) {
     <div class="xref-section">
       <div class="file-section-label">Cross-References</div>
       ${entry.crossRefs.map(ref => `
-        <div class="xref-item" onclick="navigateToRef('${escA(ref)}')" title="${esc(ref)}">${esc(ref)}</div>
+        <div class="xref-item" data-action="reference" data-reference="${esc(ref)}" title="${esc(ref)}">${esc(ref)}</div>
       `).join("")}
     </div>` : ""}
   `;
@@ -805,22 +801,22 @@ function renderContent() {
       <div class="ch-filename">${esc(selectedFile)}</div>
       <div class="ch-path-row">
         <span class="ch-path" title="${esc(filePath)}">${esc(filePath)}</span>
-        <button class="btn-sm" onclick="copyText('${escA(filePath)}', this)" title="Copy path">
+        <button class="btn-sm" data-action="copy-path" data-path="${esc(filePath)}" title="Copy path">
           Copy Path
         </button>
-        <a class="btn-sm" href="${fileGHUrl}" target="_blank" title="Open file on GitHub">
+        <a class="btn-sm" href="${esc(fileGHUrl)}" target="_blank" rel="noopener noreferrer" title="Open file on GitHub">
           GitHub
         </a>
       </div>
       <div class="ch-toolbar">
         <div class="tab-bar">
           <button class="tab-btn ${activeTab === "rendered" ? "active" : ""}"
-                  onclick="switchTab('rendered')">Rendered</button>
+                  data-action="tab" data-tab="rendered">Rendered</button>
           <button class="tab-btn ${activeTab === "source" ? "active" : ""}"
-                  onclick="switchTab('source')">Source</button>
+                  data-action="tab" data-tab="source">Source</button>
         </div>
         <div class="toolbar-spacer"></div>
-        <button class="btn-sm" onclick="copyMarkdown(this)" title="Copy raw markdown">
+        <button class="btn-sm" data-action="copy-content" title="Copy raw markdown">
           Copy Markdown
         </button>
       </div>
@@ -831,26 +827,31 @@ function renderContent() {
   `;
 }
 
+/**
+ * Displays source as text and renders Markdown only in a script-disabled, opaque frame.
+ * @returns {void} Updates the current content area using the selected file and tab state.
+ */
 function renderContentBody() {
   const area = document.getElementById("contentArea");
-  if (!area || !rawContent) return;
-
-  if (activeTab === "source") {
-    area.innerHTML = `<div class="content-source">${esc(rawContent)}</div>`;
-  } else {
-    const html = renderMarkdown(rawContent);
-    area.innerHTML = `<div class="md-rendered">${html}</div>`;
-    renderMermaidBlocks();   // swap mermaid code blocks to divs + render (async)
-    highlightCodeBlocks();   // highlight remaining code blocks
+  if (!area) return;
+  area.replaceChildren();
+  if (activeTab === "source" || !/\.mdx?$/i.test(selectedFile || "")) {
+    const source = document.createElement("div");
+    source.className = "content-source";
+    source.textContent = rawContent;
+    area.appendChild(source);
+    return;
   }
-}
-
-function highlightCodeBlocks() {
-  const area = document.getElementById("contentArea");
-  if (!area || typeof hljs === "undefined") return;
-  area.querySelectorAll("pre code").forEach(block => {
-    hljs.highlightElement(block);
-  });
+  const frame = document.createElement("iframe");
+  frame.setAttribute("sandbox", "");
+  frame.setAttribute("referrerpolicy", "no-referrer");
+  frame.title = "Document preview";
+  frame.style.cssText = "width:100%;height:100%;min-height:60vh;border:0";
+  frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+    <style>body{color:#e4e4e7;background:#141720;font:14px/1.7 system-ui;overflow-wrap:anywhere}pre{white-space:pre-wrap;background:#0f1117;padding:16px}code{font-family:monospace}a{color:#60a5fa}table{border-collapse:collapse}th,td{border:1px solid #444;padding:8px}</style>
+    </head><body>${renderMarkdown(rawContent)}</body></html>`;
+  area.appendChild(frame);
 }
 
 // == Interactions =============================================
@@ -977,21 +978,13 @@ function stripFrontmatter(src) {
   return src.replace(/^---\n[\s\S]*?\n---\n?/, "");
 }
 
+/**
+ * Uses the local renderer, which escapes document HTML before producing markup.
+ * @param {string} src Raw Markdown document text.
+ * @returns {string} Inert preview markup for the sandboxed frame.
+ */
 function renderMarkdown(src) {
-  const stripped = stripFrontmatter(src);
-  // Try marked.js first (loaded from CDN)
-  if (typeof marked !== "undefined") {
-    try {
-      if (typeof marked.parse === "function") {
-        marked.setOptions({ breaks: true, gfm: true });
-        return marked.parse(stripped);
-      }
-      return marked(stripped);
-    } catch (e) {
-      console.warn("marked.js error, using fallback:", e);
-    }
-  }
-  return renderMarkdownFallback(stripped);
+  return renderMarkdownFallback(src);
 }
 
 function renderMarkdownFallback(src) {
@@ -1031,7 +1024,7 @@ function renderMarkdownFallback(src) {
   src = src.replace(/\*(.+?)\*/g, "<em>$1</em>");
 
   // Links
-  src = src.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  src = src.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 
   // Blockquotes
   src = src.replace(/^&gt;\s?(.*)$/gm, "<blockquote>$1</blockquote>");
@@ -1087,9 +1080,6 @@ function renderMarkdownFallback(src) {
 // == Helpers ==================================================
 function esc(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-function escA(s) {
-  return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "&quot;");
 }
 function formatDate(d) {
   if (d === "unknown") return "Unknown Date";
@@ -1252,44 +1242,6 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// == Mermaid ===================================================
-mermaid.initialize({
-  startOnLoad: false,
-  theme: "dark",
-  themeVariables: {
-    darkMode: true,
-    background: "#1a1d27",
-    primaryColor: "#60a5fa",
-    primaryTextColor: "#e4e4e7",
-    primaryBorderColor: "#2a2e3a",
-    lineColor: "#71717a",
-    secondaryColor: "#8b5cf6",
-    tertiaryColor: "#34d399",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-  },
-});
-
-async function renderMermaidBlocks() {
-  const area = document.getElementById("contentArea");
-  if (!area) return;
-  const codeBlocks = area.querySelectorAll('pre > code.language-mermaid, pre > code[class="language-mermaid"]');
-  if (codeBlocks.length === 0) return;
-
-  for (const code of codeBlocks) {
-    const pre = code.parentElement;
-    const container = document.createElement("div");
-    container.className = "mermaid";
-    container.textContent = code.textContent;
-    pre.replaceWith(container);
-  }
-
-  try {
-    await mermaid.run({ nodes: area.querySelectorAll(".mermaid") });
-  } catch (e) {
-    console.warn("Mermaid render error:", e);
-  }
-}
-
 // == Surface Switcher ==========================================
 (function initSurfaceSwitcher() {
   var CURRENT_SURFACE = "knowledge-base";
@@ -1329,6 +1281,25 @@ async function renderMermaidBlocks() {
     if (e.key === "Escape") switcher.classList.remove("open");
   });
 })();
+
+// Actions use data attributes so the shell CSP can reject all inline event handlers.
+document.addEventListener("click", (event) => {
+  const target = event.target.closest("[data-action]");
+  if (!target) return;
+  const data = target.dataset;
+  switch (data.action) {
+    case "type": selectType(data.type); break;
+    case "entry": selectEntry(data.type, data.slug); break;
+    case "file": selectFile(data.file); break;
+    case "reference": navigateToRef(data.reference); break;
+    case "copy-path": copyText(data.path, target); break;
+    case "copy-content": copyMarkdown(target); break;
+    case "tab": switchTab(data.tab); break;
+  }
+});
+document.addEventListener("change", (event) => {
+  if (event.target.dataset.action === "sort") changeSort(event.target.value);
+});
 
 // == Init =====================================================
 fetchEntries();

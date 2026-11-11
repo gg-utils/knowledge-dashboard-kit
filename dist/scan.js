@@ -12,6 +12,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { knowledgeDashboardKitReadDocument, knowledgeDashboardKitResolveSafePath, } from "./content-policy.js";
 const DEFAULT_SCAN_LOGGER = {
     error: (line, error) => {
         if (error === undefined) {
@@ -21,7 +22,12 @@ const DEFAULT_SCAN_LOGGER = {
         console.error(line, error);
     },
 };
-/** Parses the first `---` fence in markdown into simple string key/value pairs. */
+/**
+ * Parses the first `---` fence in markdown into simple string key/value pairs.
+ *
+ * @param content - UTF-8 Markdown text.
+ * @returns Parsed string values, or an empty record when frontmatter is absent.
+ */
 export function knowledgeDashboardKitParseFrontmatter(content) {
     const result = {};
     const match = content.match(/^---\n([\s\S]*?)\n---/);
@@ -47,7 +53,12 @@ export function knowledgeDashboardKitParseFrontmatter(content) {
     }
     return result;
 }
-/** Builds a compact plain-text preview for client-side search after dropping frontmatter. */
+/**
+ * Builds a compact plain-text preview for client-side search after dropping frontmatter.
+ *
+ * @param options - Document text and optional maximum preview length.
+ * @returns A trimmed preview with line breaks collapsed.
+ */
 export function knowledgeDashboardKitExtractSearchText(options) {
     return options.content
         .replace(/^---\n[\s\S]*?\n---\n?/, "")
@@ -79,16 +90,30 @@ function knowledgeDashboardKitExtractCrossRefs(content) {
     const refMatches = content.match(/\.(studies|specs|plans)\/[^\s)>\]"']+/g);
     return refMatches === null ? [] : [...new Set(refMatches)];
 }
-/** Walks one dated-folder collection under the project root. */
+/**
+ * Walks one dated-folder collection under the project root.
+ *
+ * @param options - Trusted collection configuration, root, and optional logging hook.
+ * @returns Entries containing only readable documents allowed by the mandatory policy.
+ */
 export function knowledgeDashboardKitScanCollection(options) {
     const logger = options.logger ?? DEFAULT_SCAN_LOGGER;
-    const collectionDir = path.join(options.projectRoot, options.collection.dir);
-    if (!fs.existsSync(collectionDir)) {
+    const collectionPath = options.collection.dir === "." ? "" : options.collection.dir;
+    const resolvedCollection = knowledgeDashboardKitResolveSafePath(options.projectRoot, collectionPath, "directory");
+    if (resolvedCollection === null) {
         return [];
     }
+    const collectionDir = resolvedCollection.realPath;
     const entries = [];
-    const subdirs = fs
-        .readdirSync(collectionDir, { withFileTypes: true })
+    let collectionItems;
+    try {
+        collectionItems = fs.readdirSync(collectionDir, { withFileTypes: true });
+    }
+    catch {
+        logger.error("Failed to read collection directory.");
+        return [];
+    }
+    const subdirs = collectionItems
         .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
         .map((entry) => entry.name)
         .sort()
@@ -97,28 +122,35 @@ export function knowledgeDashboardKitScanCollection(options) {
         if (slug.startsWith("_")) {
             continue;
         }
-        const entryDir = path.join(collectionDir, slug);
+        const entryRelative = [collectionPath, slug].filter(Boolean).join("/");
+        const resolvedEntry = knowledgeDashboardKitResolveSafePath(options.projectRoot, entryRelative, "directory");
+        if (resolvedEntry === null)
+            continue;
+        const entryDir = resolvedEntry.realPath;
         let allFiles;
         try {
             allFiles = fs
                 .readdirSync(entryDir, { withFileTypes: true })
                 .filter((entry) => entry.isFile())
-                .map((entry) => entry.name);
+                .map((entry) => entry.name)
+                .filter((file) => knowledgeDashboardKitReadDocument(options.projectRoot, `${entryRelative}/${file}`) !== null);
         }
-        catch (error) {
-            logger.error(`Failed to read entry directory ${entryDir}:`, error);
+        catch {
+            logger.error("Failed to read entry directory.");
             continue;
         }
+        if (allFiles.length === 0)
+            continue;
         const mainFile = knowledgeDashboardKitFindCollectionMainFile(allFiles);
         let frontmatter = {};
         let mainContent = "";
         if (mainFile !== null) {
             try {
-                mainContent = fs.readFileSync(path.join(entryDir, mainFile), "utf8");
+                mainContent = knowledgeDashboardKitReadDocument(options.projectRoot, `${entryRelative}/${mainFile}`)?.content ?? "";
                 frontmatter = knowledgeDashboardKitParseFrontmatter(mainContent);
             }
-            catch (error) {
-                logger.error(`Failed to read main file ${mainFile} in ${entryDir}:`, error);
+            catch {
+                logger.error("Failed to read main document.");
             }
         }
         const title = frontmatter.title ??
@@ -135,10 +167,10 @@ export function knowledgeDashboardKitScanCollection(options) {
             fileCount: allFiles.length,
             mainFile,
             files: allFiles,
-            dirPath: `${options.collection.dir}/${slug}`,
+            dirPath: entryRelative,
             githubUrl: knowledgeDashboardKitGithubTreeUrl({
                 config: options.config,
-                repoRelativePath: `${options.collection.dir}/${slug}`,
+                repoRelativePath: entryRelative,
             }),
             crossRefs: knowledgeDashboardKitExtractCrossRefs(mainContent),
             searchText: knowledgeDashboardKitExtractSearchText({ content: mainContent }),
@@ -146,32 +178,20 @@ export function knowledgeDashboardKitScanCollection(options) {
     }
     return entries;
 }
-/** Collects one entry per top-level `.md` file under a docs source. */
+/** Collects one entry per top-level allowed document under a docs source. */
 function knowledgeDashboardKitCollectDocsFlatMarkdownEntries(options) {
     const entries = [];
     for (const item of options.items) {
-        if (!item.isFile() || !item.name.endsWith(".md")) {
+        if (!item.isFile()) {
             continue;
         }
-        const filePath = path.join(options.docsDir, item.name);
-        let stat;
-        try {
-            stat = fs.statSync(filePath);
-        }
-        catch (error) {
-            options.logger.error(`Failed to stat file ${filePath}:`, error);
+        const relative = [options.source.dir, item.name].filter(Boolean).join("/");
+        const document = knowledgeDashboardKitReadDocument(options.projectRoot, relative);
+        if (document === null)
             continue;
-        }
-        let fileContent = "";
-        let frontmatter = {};
-        try {
-            fileContent = fs.readFileSync(filePath, "utf8");
-            frontmatter = knowledgeDashboardKitParseFrontmatter(fileContent);
-        }
-        catch (error) {
-            options.logger.error(`Failed to read file ${filePath}:`, error);
-        }
-        const baseName = item.name.replace(/\.md$/, "");
+        const { content: fileContent, stat } = document;
+        const frontmatter = knowledgeDashboardKitParseFrontmatter(fileContent);
+        const baseName = item.name.replace(/\.[^.]+$/, "");
         entries.push({
             type: "docs",
             slug: `${options.source.repoLabel}/${baseName}`,
@@ -204,8 +224,8 @@ function knowledgeDashboardKitResolveSubfolderDate(options) {
                 latestMtime = stat.mtimeMs;
             }
         }
-        catch (error) {
-            options.logger.error(`Failed to stat file ${filePath}:`, error);
+        catch {
+            options.logger.error("Failed to inspect document.");
         }
     }
     return latestMtime > 0
@@ -219,16 +239,21 @@ function knowledgeDashboardKitCollectDocsSubfolderBundleEntries(options) {
         if (!item.isDirectory() || item.name.startsWith(".")) {
             continue;
         }
-        const subDir = path.join(options.docsDir, item.name);
+        const repoRelativePath = [options.source.dir, item.name].filter(Boolean).join("/");
+        const resolvedSubdir = knowledgeDashboardKitResolveSafePath(options.projectRoot, repoRelativePath, "directory");
+        if (resolvedSubdir === null)
+            continue;
+        const subDir = resolvedSubdir.realPath;
         let subFiles;
         try {
             subFiles = fs
                 .readdirSync(subDir, { withFileTypes: true })
                 .filter((entry) => entry.isFile())
-                .map((entry) => entry.name);
+                .map((entry) => entry.name)
+                .filter((file) => knowledgeDashboardKitReadDocument(options.projectRoot, `${repoRelativePath}/${file}`) !== null);
         }
-        catch (error) {
-            options.logger.error(`Failed to read subdirectory ${subDir}:`, error);
+        catch {
+            options.logger.error("Failed to read document directory.");
             continue;
         }
         if (subFiles.length === 0) {
@@ -241,14 +266,13 @@ function knowledgeDashboardKitCollectDocsSubfolderBundleEntries(options) {
         let frontmatter = {};
         if (mainFile !== null) {
             try {
-                mainContent = fs.readFileSync(path.join(subDir, mainFile), "utf8");
+                mainContent = knowledgeDashboardKitReadDocument(options.projectRoot, `${repoRelativePath}/${mainFile}`)?.content ?? "";
                 frontmatter = knowledgeDashboardKitParseFrontmatter(mainContent);
             }
-            catch (error) {
-                options.logger.error(`Failed to read main file ${mainFile} in ${subDir}:`, error);
+            catch {
+                options.logger.error("Failed to read main document.");
             }
         }
-        const repoRelativePath = `${options.source.dir}/${item.name}`;
         entries.push({
             type: "docs",
             slug: `${options.source.repoLabel}/${item.name}`,
@@ -275,35 +299,41 @@ function knowledgeDashboardKitCollectDocsSubfolderBundleEntries(options) {
     }
     return entries;
 }
-/** Indexes markdown under a single docs source. */
+/**
+ * Indexes markdown under a single docs source.
+ *
+ * @param options - Trusted source configuration, root, and optional logging hook.
+ * @returns Flat document entries and immediate subfolder bundles allowed by the policy.
+ */
 export function knowledgeDashboardKitScanDocsSource(options) {
     const logger = options.logger ?? DEFAULT_SCAN_LOGGER;
-    const docsDir = path.join(options.projectRoot, options.source.dir);
-    if (!fs.existsSync(docsDir)) {
+    const source = { ...options.source, dir: options.source.dir === "." ? "" : options.source.dir };
+    const resolvedDocs = knowledgeDashboardKitResolveSafePath(options.projectRoot, source.dir, "directory");
+    if (resolvedDocs === null) {
         return [];
     }
+    const docsDir = resolvedDocs.realPath;
     let items;
     try {
         items = fs.readdirSync(docsDir, { withFileTypes: true });
     }
-    catch (error) {
-        logger.error(`Failed to read docs directory ${docsDir}:`, error);
+    catch {
+        logger.error("Failed to read docs directory.");
         return [];
     }
     return [
         ...knowledgeDashboardKitCollectDocsFlatMarkdownEntries({
             config: options.config,
-            docsDir,
             items,
-            logger,
-            source: options.source,
+            source,
+            projectRoot: options.projectRoot,
         }),
         ...knowledgeDashboardKitCollectDocsSubfolderBundleEntries({
             config: options.config,
-            docsDir,
             items,
             logger,
-            source: options.source,
+            source,
+            projectRoot: options.projectRoot,
         }),
     ];
 }
@@ -311,7 +341,12 @@ export function knowledgeDashboardKitScanDocsSource(options) {
 function knowledgeDashboardKitCreateEmptyCounts() {
     return { docs: 0, plans: 0, specs: 0, studies: 0 };
 }
-/** Refreshes the full in-memory index for all configured collections and docs sources. */
+/**
+ * Refreshes the full in-memory index for all configured collections and docs sources.
+ *
+ * @param options - Trusted dashboard configuration, root, and optional logging hook.
+ * @returns The current safe document index, timestamp, and counts by entry type.
+ */
 export function knowledgeDashboardKitScanAll(options) {
     const logger = options.logger ?? DEFAULT_SCAN_LOGGER;
     const entries = [];
