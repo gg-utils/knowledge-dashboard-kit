@@ -67,6 +67,13 @@ export type KnowledgeDashboardKit_RealmUrlConfig = {
 };
 /** Project-owned config consumed by reusable scanning and server helpers. */
 export type KnowledgeDashboardKit_Config = {
+    /** Exact lowercase hidden direct-child collection names; reserved names can never be enabled. */
+    readonly allowedHiddenCollectionRoots?: readonly string[];
+    /** Optional positive integer scan budgets; defaults are 10,000 entries and 64 MiB read. */
+    readonly scanLimits?: {
+        readonly maxEntries?: number;
+        readonly maxTotalBytes?: number;
+    };
     readonly title: string;
     readonly collections: readonly KnowledgeDashboardKit_CollectionConfig[];
     readonly docsSources: readonly KnowledgeDashboardKit_DocsSourceConfig[];
@@ -86,6 +93,7 @@ export type KnowledgeDashboardKit_ResolvePortOptions = {
 /** One indexed artifact row serialized to `/api/entries` for the dashboard UI. */
 export type KnowledgeDashboardKit_Entry = {
     readonly type: KnowledgeDashboardKit_CollectionType;
+    /** Opaque entry identity; flat document keys include the full relative filename. */
     readonly slug: string;
     readonly title: string;
     readonly date: string;
@@ -101,6 +109,8 @@ export type KnowledgeDashboardKit_Entry = {
 };
 /** Full scan response returned from `/api/entries`. */
 export type KnowledgeDashboardKit_ScanResult = {
+    /** A budget failure discards the entire index and leaves counts at zero. */
+    readonly error?: "Scan budget exceeded";
     readonly entries: readonly KnowledgeDashboardKit_Entry[];
     readonly scannedAt: string;
     readonly counts: Record<KnowledgeDashboardKit_CollectionType, number>;

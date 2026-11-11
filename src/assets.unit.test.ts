@@ -61,3 +61,29 @@ test("the shell needs no remote scripts or inline event handlers", () => {
   assert.doesNotMatch(html, /<script\b[^>]*\bsrc\s*=/iu);
   assert.doesNotMatch(html, /\bon(?:click|change|error|load)\s*=/iu);
 });
+
+
+test("every bundled API call sends the dashboard header and scan errors appear in the viewer", async () => {
+  const html = fs.readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
+  const script = html.match(/<script>([\s\S]*?)<\/script>/u)?.[1];
+  assert.ok(script);
+  const requests: { target: string; headers: Record<string, string> }[] = [];
+  const errorNode = { textContent: "" };
+  const context = vm.createContext({
+    fetch: async (target: string, options: { headers: Record<string, string> }) => {
+      requests.push({ target, headers: options.headers });
+      return { ok: true, json: async () => ({ entries: [], counts: {}, error: "Scan budget exceeded" }), text: async () => "Public text" };
+    },
+    document: { getElementById: () => errorNode },
+  });
+  vm.runInContext(`
+    let allEntries; function renderTypeNav() {}
+    ${script.slice(script.indexOf("async function fetchEntries("), script.indexOf("// == Render: Type nav"))}
+  `, context);
+  await vm.runInContext("fetchEntries()", context);
+  assert.equal(errorNode.textContent, "Scan budget exceeded");
+  assert.equal(await vm.runInContext('fetchContent("docs", "guide.md")', context), "Public text");
+  assert.deepEqual(requests.map((entry) => entry.target), ["/api/entries", "/api/entry-content?path=docs&file=guide.md"]);
+  for (const entry of requests) assert.equal(entry.headers["X-Knowledge-Dashboard"], "1");
+  assert.equal([...script.matchAll(/\bfetch\(/gu)].length, requests.length);
+});

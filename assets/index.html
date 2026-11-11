@@ -601,17 +601,21 @@ function statusClass(s) {
 
 // == Data fetching ============================================
 async function fetchEntries() {
-  const res = await fetch("/api/entries");
+  const res = await fetch("/api/entries", { headers: { "X-Knowledge-Dashboard": "1" } });
   const data = await res.json();
   allEntries = data.entries;
   renderTypeNav(data.counts);
+  if (data.error) {
+    document.getElementById("colEntries").textContent = data.error;
+    return;
+  }
   applyFilters();
   applyHash();
   setFocusedCol(focusedCol);
 }
 
 async function fetchContent(entryPath, file) {
-  const res = await fetch(`/api/entry-content?path=${encodeURIComponent(entryPath)}&file=${encodeURIComponent(file)}`);
+  const res = await fetch(`/api/entry-content?path=${encodeURIComponent(entryPath)}&file=${encodeURIComponent(file)}`, { headers: { "X-Knowledge-Dashboard": "1" } });
   if (!res.ok) return "Failed to load file.";
   return await res.text();
 }
