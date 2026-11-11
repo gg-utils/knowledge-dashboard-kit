@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Config-driven knowledge dashboard scanning and HTTP server helpers.",
-  "license": "UNLICENSED",
+  "license": "0BSD",
   "type": "module",
   "sideEffects": false,
   "main": "./src/index.ts",
