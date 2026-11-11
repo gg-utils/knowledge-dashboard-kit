@@ -26,6 +26,9 @@ cp node_modules/@gg-utils/knowledge-dashboard-kit/examples/knowledge-dashboard.m
 node knowledge-dashboard.mjs
 ```
 
+With npm 12, git dependencies require an explicit opt-in: use `npm install --ignore-scripts --allow-git=root`
+in place of the install command above. This allows the direct git dependency declared in your package.json.
+
 Edit `knowledge-dashboard.config.mjs` to set `githubRepo` to your `owner/repository` and the title
 and branch as needed. The supplied config explicitly enables `.studies`, `.plans`, and `.specs`
 collections and scans `docs` as a docs source. Collection documents belong in entry folders such as
