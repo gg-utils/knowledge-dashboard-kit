@@ -25,6 +25,7 @@ import { knowledgeDashboardKitTestConfig } from "./test-config.unit.js";
 
 const tempDirs: string[] = [];
 
+/** Creates an isolated synthetic filesystem fixture for a scanner test. */
 function makeProjectRoot(): string {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "knowledge-dashboard-scan-"));
   tempDirs.push(projectRoot);
@@ -39,7 +40,7 @@ afterEach(() => {
 
 test("knowledgeDashboardKitScanAll indexes collections and docs sources", () => {
   const projectRoot = makeProjectRoot();
-  const studyDir = path.join(projectRoot, ".studies", "2026-05-20-runtime-study");
+  const studyDir = path.join(projectRoot, "studies", "2026-05-20-runtime-study");
   const docsDir = path.join(projectRoot, "docs", "operators");
   fs.mkdirSync(studyDir, { recursive: true });
   fs.mkdirSync(docsDir, { recursive: true });

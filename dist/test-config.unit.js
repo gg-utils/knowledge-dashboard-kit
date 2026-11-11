@@ -27,9 +27,9 @@ const currentDir = path.dirname(fileURLToPath(import.meta.url));
 export const knowledgeDashboardKitTestConfig = {
     title: "Runtime Knowledge Dashboard",
     collections: [
-        { type: "studies", dir: ".studies", color: "#60a5fa", icon: "microscope" },
-        { type: "specs", dir: ".specs", color: "#8b5cf6", icon: "clipboard" },
-        { type: "plans", dir: ".plans", color: "#34d399", icon: "map" },
+        { type: "studies", dir: "studies", color: "#60a5fa", icon: "microscope" },
+        { type: "specs", dir: "specs", color: "#8b5cf6", icon: "clipboard" },
+        { type: "plans", dir: "plans", color: "#34d399", icon: "map" },
     ],
     docsSources: [{ repoLabel: "runtime", dir: "docs" }],
     githubRepo: "example/runtime",
