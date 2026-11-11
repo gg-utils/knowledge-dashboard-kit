@@ -141,11 +141,17 @@ content read enforce the same filename, filesystem, and size policy:
   inode identities for each published file and every parent directory, including the real root.
   Every read requires the complete chain to match, before and after its no-follow/non-blocking
   bounded read. Replacing a file or parent directory makes the file unavailable until a rescan,
-  even if the new object is an otherwise ordinary allowed document. Hard links are never eligible.
+  even if the new object is an otherwise ordinary allowed document. These content checks rely on
+  the filesystem reporting stable device and inode numbers. Documentation trees with hard-linked
+  files (link count above **1**) are not supported; such files are skipped by the scanner and
+  refused on content reads.
 
-Missing, malformed, denied, stale, oversized, and unreadable content requests return the identical
-`404 {"error":"Not found"}`. Generated filesystem errors and error hooks contain no absolute paths or
-underlying filesystem exceptions. Request logging is caller-controlled and receives the raw URL.
+Missing, malformed, denied, oversized, and unreadable content requests return the identical
+`404 {"error":"Not found"}`. A listed document whose file or parent identity has changed returns
+`409 {"error":"File changed since the last scan"}` without document text or filesystem details.
+The viewer shows an unavailable state with a **Refresh** action that rescans and reloads through
+`/api/entries`. Generated filesystem errors and error hooks contain no absolute paths or underlying
+filesystem exceptions. Request logging is caller-controlled and receives the raw URL.
 
 ### Explicit hidden collection roots
 

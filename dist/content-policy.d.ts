@@ -53,13 +53,14 @@ export declare function knowledgeDashboardKitResolveSafePath(projectRoot: string
  * Reads a bounded regular document, checking scan identity and all ancestors before and after.
  * @param projectRoot - Trusted root containing publishable documents.
  * @param relative - Exact canonical root-relative filename.
- * @param options - Validated root exceptions, scan identity, and optional scan-budget reservation.
+ * @param options - Root exceptions, scan identity, optional change notification and scan budget.
  * @returns UTF-8 text, stat, and identities, or null for denied or changed objects.
  * @throws If the caller's budget reservation rejects the upcoming read.
  */
 export declare function knowledgeDashboardKitReadDocument(projectRoot: string, relative: string, options?: {
     readonly hiddenRoots?: ReadonlySet<string>;
     readonly expectedIdentity?: KnowledgeDashboardKit_DocumentIdentity;
+    readonly onIdentityChange?: () => void;
     readonly beforeRead?: (bytes: number) => void;
 }): {
     readonly content: string;

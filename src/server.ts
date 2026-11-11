@@ -335,9 +335,15 @@ export function knowledgeDashboardKitStartServer(
         knowledgeDashboardKitWriteJson({ body: { error: "Not found" }, res, statusCode: 404 });
         return;
       }
-      const document = knowledgeDashboardKitReadDocument(projectRoot, relative, { hiddenRoots, expectedIdentity: published.identity });
+      let changedSinceScan = false;
+      const document = knowledgeDashboardKitReadDocument(projectRoot, relative, {
+        hiddenRoots, expectedIdentity: published.identity, onIdentityChange: () => { changedSinceScan = true; },
+      });
       if (document === null) {
-        knowledgeDashboardKitWriteJson({ body: { error: "Not found" }, res, statusCode: 404 });
+        knowledgeDashboardKitWriteJson({
+          body: { error: changedSinceScan ? "File changed since the last scan" : "Not found" },
+          res, statusCode: changedSinceScan ? 409 : 404,
+        });
         return;
       }
       res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
