@@ -40,6 +40,7 @@ import { knowledgeDashboardKitTestConfig } from "./test-config.unit.js";
 
 const tempDirs: string[] = [];
 
+/** Writes synthetic port configuration in an isolated temporary directory. */
 function writeTempEnvFile(content: string): string {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "knowledge-dashboard-kit-"));
   tempDirs.push(tempDir);
